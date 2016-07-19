@@ -1,10 +1,12 @@
 import os
 import time
+import datetime
 import random
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 
+from .plot_learning import plot
 from .base import BaseModel
 from .history import History
 from .ops import linear, conv2d
@@ -17,6 +19,8 @@ class Agent(BaseModel):
     self.sess = sess
     self.weight_dir = 'weights'
 
+    self.itr  = 0
+
     self.env = environment
     self.history = History(self.config)
     self.memory = ReplayMemory(self.config, self.model_dir)
@@ -26,7 +30,29 @@ class Agent(BaseModel):
       self.step_input = tf.placeholder('int32', None, name='step_input')
       self.step_assign_op = self.step_op.assign(self.step_input)
 
+    tempdir = os.path.join(os.getcwd(), "models")
+    self.create_dir(tempdir)
+    folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    self.mydir = os.path.join(tempdir, folder_name)
+    self.create_dir(self.mydir)
+    self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
+    data_file = open(self.prog_file, 'wb')
+    data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game\n')
+    data_file.close()
+
     self.build_dqn()
+
+  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game):
+      fd = open(self.prog_file,'a')
+      fd.write('%f,%f,%f,%f,%f,%f,%f\n' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game))
+      fd.close()
+
+  def create_dir(self,p):
+    try:
+      os.makedirs(p)
+    except OSError, e:
+      if e.errno != 17:
+        raise  # This was not a "directory exist" error..
 
   def train(self):
     start_step = self.step_op.eval()
@@ -90,7 +116,12 @@ class Agent(BaseModel):
             max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
 
           if self.step > 180:
-            self.inject_summary({
+            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+
+            plot(self.mydir)
+            self.itr+=1
+            '''
+                        self.inject_summary({
                 'average.reward': avg_reward,
                 'average.loss': avg_loss,
                 'average.q': avg_q,
@@ -102,6 +133,8 @@ class Agent(BaseModel):
                 'episode.actions': actions,
                 'training.learning_rate': self.learning_rate_op.eval({self.learning_rate_step: self.step}),
               }, self.step)
+            '''
+
 
           num_game = 0
           total_reward = 0.
@@ -189,14 +222,14 @@ class Agent(BaseModel):
         self.s_t = tf.placeholder('float32',
             [None, self.history_length, self.screen_width, self.screen_height], name='s_t')
 
-      self.l1, self.w['l1_w'], self.w['l1_b'] = conv2d(self.s_t,
-          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='l1')
-      self.l2, self.w['l2_w'], self.w['l2_b'] = conv2d(self.l1,
-          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='l2')
-      self.l3, self.w['l3_w'], self.w['l3_b'] = conv2d(self.l2,
-          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='l3')
+      shape = self.s_t.get_shape().as_list()
+      self.s_t_flat = tf.reshape(self.s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
+
+      self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 128, activation_fn=activation_fn, name='l3')
+
 
       shape = self.l3.get_shape().as_list()
+
       self.l3_flat = tf.reshape(self.l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
 
       if self.dueling:
@@ -216,7 +249,7 @@ class Agent(BaseModel):
         self.q = self.value + (self.advantage - 
           tf.reduce_mean(self.advantage, reduction_indices=1, keep_dims=True))
       else:
-        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512, activation_fn=activation_fn, name='l4')
+        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 128, activation_fn=activation_fn, name='l4')
         self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.env.action_size, name='q')
 
       self.q_action = tf.argmax(self.q, dimension=1)
@@ -236,12 +269,11 @@ class Agent(BaseModel):
         self.target_s_t = tf.placeholder('float32', 
             [None, self.history_length, self.screen_width, self.screen_height], name='target_s_t')
 
-      self.target_l1, self.t_w['l1_w'], self.t_w['l1_b'] = conv2d(self.target_s_t, 
-          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='target_l1')
-      self.target_l2, self.t_w['l2_w'], self.t_w['l2_b'] = conv2d(self.target_l1,
-          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='target_l2')
-      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = conv2d(self.target_l2,
-          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='target_l3')
+
+      shape = self.target_s_t.get_shape().as_list()
+      self.target_s_t_flat = tf.reshape(self.target_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
+
+      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 128, activation_fn=activation_fn, name='target_l3')
 
       shape = self.target_l3.get_shape().as_list()
       self.target_l3_flat = tf.reshape(self.target_l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
@@ -264,7 +296,7 @@ class Agent(BaseModel):
           tf.reduce_mean(self.t_advantage, reduction_indices=1, keep_dims=True))
       else:
         self.target_l4, self.t_w['l4_w'], self.t_w['l4_b'] = \
-            linear(self.target_l3_flat, 512, activation_fn=activation_fn, name='target_l4')
+            linear(self.target_l3_flat, 128, activation_fn=activation_fn, name='target_l4')
         self.target_q, self.t_w['q_w'], self.t_w['q_b'] = \
             linear(self.target_l4, self.env.action_size, name='target_q')
 
@@ -360,7 +392,8 @@ class Agent(BaseModel):
       self.summary_placeholders[tag]: value for tag, value in tag_dict.items()
     })
     for summary_str in summary_str_lists:
-      self.writer.add_summary(summary_str, self.step)
+      print(summary_str)
+      #self.writer.add_summary(summary_str, self.step)
 
   def play(self, n_step=10000, n_episode=100, test_ep=None, render=False):
     if test_ep == None:

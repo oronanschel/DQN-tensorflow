@@ -2,7 +2,8 @@ import random
 import tensorflow as tf
 
 from dqn.agent import Agent
-from dqn.environment import GymEnvironment, SimpleGymEnvironment
+
+from dqn.environment import GymEnvironment
 from config import get_config
 
 flags = tf.app.flags
@@ -18,7 +19,7 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
-flags.DEFINE_string('gpu_fraction', '1/1', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
+flags.DEFINE_string('gpu_fraction', '9/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
 flags.DEFINE_integer('random_seed', 123, 'Value of random seed')
@@ -47,10 +48,7 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
-    if config.env_type == 'simple':
-      env = SimpleGymEnvironment(config)
-    else:
-      env = GymEnvironment(config)
+    env = GymEnvironment(config)
 
     if not FLAGS.use_gpu:
       config.cnn_format = 'NHWC'
