@@ -37,14 +37,16 @@ class Agent(BaseModel):
     self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     data_file = open(self.prog_file, 'wb')
-    data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game\n')
+    data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
+                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,\n')
     data_file.close()
 
     self.build_dqn()
 
-  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game):
+  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,l1_norm):
       fd = open(self.prog_file,'a')
-      fd.write('%f,%f,%f,%f,%f,%f,%f\n' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game))
+      fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
+      fd.write('%f,%f,%f,%f,%f,%f\n' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5] ))
       fd.close()
 
   def create_dir(self,p):
@@ -116,10 +118,14 @@ class Agent(BaseModel):
             max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
 
           if self.step > 180:
-            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+            # gradients, weights sample
+            g_w_l1_norm = self.gradient_weights_l1_norm()
+
+
+            ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep_rec,g_w_l1_norm)
 
             plot(self.mydir)
-            self.itr+=1
             '''
                         self.inject_summary({
                 'average.reward': avg_reward,
@@ -144,6 +150,36 @@ class Agent(BaseModel):
           ep_reward = 0.
           ep_rewards = []
           actions = []
+
+  def gradient_weights_l1_norm(self):
+    if self.memory.count < self.history_length:
+      return
+    else:
+      s_t, action, reward, s_t_plus_1, terminal = self.memory.sample()
+
+    if self.double_q:
+      # Double Q-learning
+      pred_action = self.q_action.eval({self.s_t: s_t_plus_1})
+
+      q_t_plus_1_with_pred_action = self.target_q_with_idx.eval({
+        self.target_s_t: s_t_plus_1,
+        self.target_q_idx: [[idx, pred_a] for idx, pred_a in enumerate(pred_action)]
+      })
+      target_q_t = (1. - terminal) * self.discount * q_t_plus_1_with_pred_action + reward
+    else:
+      q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
+
+      terminal = np.array(terminal) + 0.
+      max_q_t_plus_1 = np.max(q_t_plus_1, axis=1)
+      target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+
+      grads_weights_samp =  self.sess.run([x for x in self.grad_and_val_l1_norm], {
+        self.target_q_t: target_q_t,
+        self.action: action,
+        self.s_t: s_t,
+        self.learning_rate_step: self.step,
+      })
+      return grads_weights_samp
 
   def predict(self, s_t, test_ep=None):
     ep = test_ep or (self.ep_end +
@@ -193,12 +229,18 @@ class Agent(BaseModel):
       max_q_t_plus_1 = np.max(q_t_plus_1, axis=1)
       target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
 
-    _, q_t, loss, summary_str = self.sess.run([self.optim, self.q, self.loss, self.q_summary], {
+      _, q_t, loss, summary_str = self.sess.run([self.optim, self.q, self.loss, self.q_summary], {
       self.target_q_t: target_q_t,
       self.action: action,
       self.s_t: s_t,
       self.learning_rate_step: self.step,
     })
+
+
+
+
+
+
 
     self.writer.add_summary(summary_str, self.step)
     self.total_loss += loss
@@ -333,8 +375,24 @@ class Agent(BaseModel):
               self.learning_rate_decay_step,
               self.learning_rate_decay,
               staircase=True))
+
       self.optim = tf.train.RMSPropOptimizer(
           self.learning_rate_op, momentum=0.95, epsilon=0.01).minimize(self.loss)
+
+
+      self.comp_grads_and_vars = tf.train.RMSPropOptimizer(self.learning_rate_op, momentum=0.95, epsilon=0.01).compute_gradients(self.loss)
+
+      l1_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][0]),name='l1_grad_l1_norm')
+      l2_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][0]),name='l2_grad_l1_norm')
+      l3_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][0]),name='l3_grad_l1_norm')
+
+      l1_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][1]),name='l1_l1_norm')
+      l2_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][1]),name='l2_l1_norm')
+      l3_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][1]),name='l3_l1_norm')
+
+
+      self.grad_and_val_l1_norm = [l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm]
+
 
     with tf.variable_scope('summary'):
       scalar_summary_tags = ['average.reward', 'average.loss', 'average.q', \
