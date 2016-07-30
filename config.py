@@ -1,6 +1,6 @@
 class AgentConfig(object):
   # scale = 10000
-  scale = 600
+  scale = 60
   display = False
 
   max_step = 5000 * scale

@@ -19,7 +19,7 @@ class Agent(BaseModel):
     self.sess = sess
     self.weight_dir = 'weights'
 
-    self.HEADSNUM = 15
+    self.HEADSNUM = 2
     self.batch_size = config.batch_size
 
     self.env = environment
@@ -74,13 +74,15 @@ class Agent(BaseModel):
       self.history.add(screen)
 
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
+
+      current_head = 0
       if self.step == self.learn_start:
         num_game, self.update_count, ep_reward = 0, 0, 0.
         total_reward, self.total_loss, self.total_q = 0., 0., 0.
         ep_rewards, actions = [], []
 
       # 1. predict
-      action = self.predict(self.history.get())
+      action = self.predict(self.history.get(),current_head)
       # 2. act
       screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe
@@ -92,6 +94,9 @@ class Agent(BaseModel):
         num_game += 1
         ep_rewards.append(ep_reward)
         ep_reward = 0.
+
+        # replace playing head
+        current_head = np.random.randint(self.HEADSNUM)
       else:
         ep_reward += reward
 
@@ -183,15 +188,17 @@ class Agent(BaseModel):
         target_q_t_slice = target_q_t_slice.reshape(self.batch_size, 1)
         target_q_t = np.concatenate((target_q_t, target_q_t_slice), axis=1)
 
+      update_policy = np.random.randint(low=0, high=2, size=[self.HEADSNUM, 1])
       grads_weights_samp =  self.sess.run([x for x in self.grad_and_val_l1_norm], {
         self.target_q_t: target_q_t,
         self.action: action,
         self.s_t: s_t,
         self.learning_rate_step: self.step,
+        self.update_policy: update_policy
       })
       return grads_weights_samp
 
-  def predict(self, s_t, test_ep=None):
+  def predict(self, s_t, current_head, test_ep=None):
     ep = test_ep or (self.ep_end +
         max(0., (self.ep_start - self.ep_end)
           * (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
@@ -199,7 +206,8 @@ class Agent(BaseModel):
     if random.random() < ep:
       action = random.randrange(self.env.action_size)
     else:
-      action = random.randrange(self.env.action_size)
+      action = self.q_action.eval({self.s_t: [s_t],self.head: current_head})[0]
+
       #action = self.q_action.eval({self.s_t: [s_t]})[0]
 
     return action
@@ -259,12 +267,13 @@ class Agent(BaseModel):
 
 
 
-
+      update_policy = np.random.randint(low=0,high=2,size=[self.HEADSNUM,1])
       _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
       self.target_q_t: target_q_t,
       self.action: action,
       self.s_t: s_t,
       self.learning_rate_step: self.step,
+      self.update_policy : update_policy,
     })
 
     self.total_loss += loss
@@ -290,7 +299,7 @@ class Agent(BaseModel):
       shape = self.s_t.get_shape().as_list()
       self.s_t_flat = tf.reshape(self.s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
 
-      self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 128, activation_fn=activation_fn, name='l3')
+      self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 32, activation_fn=activation_fn, name='l3')
 
 
       shape = self.l3.get_shape().as_list()
@@ -314,12 +323,13 @@ class Agent(BaseModel):
         self.q = self.value + (self.advantage - 
           tf.reduce_mean(self.advantage, reduction_indices=1, keep_dims=True))
       else:
-        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 128, activation_fn=activation_fn, name='l4')
+        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 32, activation_fn=activation_fn, name='l4')
         self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.HEADSNUM * self.env.action_size, name='q')
 
-
+      self.head = tf.placeholder('int32', name='head')
       #self.q_action = tf.argmax(self.q, dimension=1)
-
+      tmp_q_slice = tf.slice(self.q, [0, self.head * self.env.action_size], [-1, self.env.action_size])
+      self.q_action = tf.argmax(tmp_q_slice, dimension=1)
 
 
     # target network
@@ -335,7 +345,7 @@ class Agent(BaseModel):
       shape = self.target_s_t.get_shape().as_list()
       self.target_s_t_flat = tf.reshape(self.target_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
 
-      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 128, activation_fn=activation_fn, name='target_l3')
+      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 32, activation_fn=activation_fn, name='target_l3')
 
       shape = self.target_l3.get_shape().as_list()
       self.target_l3_flat = tf.reshape(self.target_l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
@@ -358,7 +368,7 @@ class Agent(BaseModel):
           tf.reduce_mean(self.t_advantage, reduction_indices=1, keep_dims=True))
       else:
         self.target_l4, self.t_w['l4_w'], self.t_w['l4_b'] = \
-            linear(self.target_l3_flat, 128, activation_fn=activation_fn, name='target_l4')
+            linear(self.target_l3_flat, 32, activation_fn=activation_fn, name='target_l4')
         self.target_q, self.t_w['q_w'], self.t_w['q_b'] = \
             linear(self.target_l4, self.HEADSNUM * self.env.action_size, name='target_q')
 
@@ -378,9 +388,6 @@ class Agent(BaseModel):
       self.target_q_t = tf.placeholder('float32', [self.batch_size, self.HEADSNUM], name='target_q_t')
       self.action = tf.placeholder('int64', [self.batch_size], name='action')
 
-         # TODO: add here update policy
-
-
       q_acted_l = []
       for k in range(0,self.HEADSNUM):
         action_one_hot_slice = tf.one_hot(self.action, self.env.action_size, 1.0, 0.0, name='action_one_hot')
@@ -392,7 +399,11 @@ class Agent(BaseModel):
       q_acted = tf.concat(1,q_acted_l)
 
       self.delta = self.target_q_t - q_acted
-      self.clipped_delta = tf.clip_by_value(self.delta, self.min_delta, self.max_delta, name='clipped_delta')
+
+      self.update_policy = tf.placeholder('float32',shape=[self.HEADSNUM,1],name='update_policy')
+      self.delta_up = tf.matmul(self.delta,self.update_policy)
+
+      self.clipped_delta = tf.clip_by_value(self.delta_up, self.min_delta, self.max_delta, name='clipped_delta')
 
       self.global_step = tf.Variable(0, trainable=False)
 
@@ -450,9 +461,7 @@ class Agent(BaseModel):
     self.load_model()
     self.update_target_q_network()
 
-  def q_action(self,head):
-    tmp_q_1head = tf.split(self.q)
-    return
+
 
   def update_target_q_network(self):
     for name in self.w.keys():
