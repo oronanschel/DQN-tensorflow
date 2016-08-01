@@ -209,7 +209,6 @@ class Agent(BaseModel):
 
     if random.random() < ep:
       action = random.randrange(self.env.action_size)
-      #action = self.q_action.eval({self.s_t: [s_t], self.head: current_head})[0]
     else:
       action = self.q_action.eval({self.s_t: [s_t],self.head: current_head})[0]
 
@@ -272,6 +271,7 @@ class Agent(BaseModel):
 
 
 
+
       _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
       self.target_q_t: target_q_t,
       self.action: action,
@@ -300,12 +300,21 @@ class Agent(BaseModel):
         self.s_t = tf.placeholder('float32',
             [None, self.history_length, self.screen_width, self.screen_height], name='s_t')
 
-      self.l1, self.w['l1_w'], self.w['l1_b'] = conv2d(self.s_t,
-          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='l1')
-      self.l2, self.w['l2_w'], self.w['l2_b'] = conv2d(self.l1,
-          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='l2')
-      self.l3, self.w['l3_w'], self.w['l3_b'] = conv2d(self.l2,
-          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='l3')
+
+
+      if self.config.ToyProblem:
+        shape = self.s_t.get_shape().as_list()
+        self.s_t_flat = tf.reshape(self.s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
+        self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 128, activation_fn=activation_fn, name='l3')
+
+      else:
+        self.l1, self.w['l1_w'], self.w['l1_b'] = conv2d(self.s_t,
+            32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='l1')
+        self.l2, self.w['l2_w'], self.w['l2_b'] = conv2d(self.l1,
+            64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='l2')
+        self.l3, self.w['l3_w'], self.w['l3_b'] = conv2d(self.l2,
+            64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='l3')
+
 
       shape = self.l3.get_shape().as_list()
       self.l3_flat = tf.reshape(self.l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
@@ -345,12 +354,18 @@ class Agent(BaseModel):
         self.target_s_t = tf.placeholder('float32', 
             [None, self.history_length, self.screen_width, self.screen_height], name='target_s_t')
 
-      self.target_l1, self.t_w['l1_w'], self.t_w['l1_b'] = conv2d(self.target_s_t,
-          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='target_l1')
-      self.target_l2, self.t_w['l2_w'], self.t_w['l2_b'] = conv2d(self.target_l1,
-          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='target_l2')
-      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = conv2d(self.target_l2,
-          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='target_l3')
+      if self.config.ToyProblem:
+        shape = self.target_s_t.get_shape().as_list()
+        self.target_s_t_flat = tf.reshape(self.target_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
+        self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 128, activation_fn=activation_fn, name='target_l3')
+
+      else:
+        self.target_l1, self.t_w['l1_w'], self.t_w['l1_b'] = conv2d(self.target_s_t,
+            32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='target_l1')
+        self.target_l2, self.t_w['l2_w'], self.t_w['l2_b'] = conv2d(self.target_l1,
+            64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='target_l2')
+        self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = conv2d(self.target_l2,
+            64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='target_l3')
 
       shape = self.target_l3.get_shape().as_list()
       self.target_l3_flat = tf.reshape(self.target_l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
@@ -406,9 +421,9 @@ class Agent(BaseModel):
       self.delta = self.target_q_t - q_acted
 
       self.mask = tf.placeholder('float32',shape=[self.batch_size,self.HEADSNUM],name='mask')
-      #self.delta_up = tf.mul(self.delta, self.mask)
+      self.delta_up = tf.mul(self.delta, self.mask)
 
-      self.clipped_delta = tf.clip_by_value(self.delta, self.min_delta, self.max_delta, name='clipped_delta')
+      self.clipped_delta = tf.clip_by_value(self.delta_up, self.min_delta, self.max_delta, name='clipped_delta')
 
       self.global_step = tf.Variable(0, trainable=False)
 
@@ -431,12 +446,18 @@ class Agent(BaseModel):
       l1_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][0]),name='l1_grad_l1_norm')
       l2_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][0]),name='l2_grad_l1_norm')
       l3_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][0]),name='l3_grad_l1_norm')
-      l4_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][0]),name='l4_grad_l1_norm')
+      if self.config.ToyProblem:
+        l4_grad_l1_norm = tf.constant(0)
+      else:
+        l4_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][0]),name='l4_grad_l1_norm')
 
       l1_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][1]),name='l1_l1_norm')
       l2_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][1]),name='l2_l1_norm')
       l3_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][1]),name='l3_l1_norm')
-      l4_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][1]), name='l4_l1_norm')
+      if self.config.ToyProblem:
+        l4_l1_norm = tf.constant(0)
+      else:
+        l4_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][1]), name='l4_l1_norm')
 
       self.grad_and_val_l1_norm = [l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm]
 

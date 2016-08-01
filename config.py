@@ -1,6 +1,6 @@
 class AgentConfig(object):
   scale = 10000
-
+  scale = 10
   display = False
 
   max_step = 5000 * scale
@@ -36,9 +36,18 @@ class AgentConfig(object):
   # Bootstrap
   heads_num = 5
 
+  # ToyProblem
+  ToyProblem = False
+
 class EnvironmentConfig(object):
   env_name = 'Breakout-v0'
 
+
+  # for toy
+  # screen_width  = 15
+  # screen_height = 1
+
+  # # for atari
   screen_width  = 84
   screen_height = 84
   max_reward = 1.

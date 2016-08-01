@@ -4,6 +4,7 @@ import tensorflow as tf
 from dqn.agent import Agent
 
 from dqn.environment import GymEnvironment
+from dqn.Myenvironment import MyGymEnvironment
 from config import get_config
 
 flags = tf.app.flags
@@ -48,7 +49,10 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
-    env = GymEnvironment(config)
+    if config.ToyProblem:
+      env = MyGymEnvironment(config)
+    else:
+      env = GymEnvironment(config)
 
     if not FLAGS.use_gpu:
       config.cnn_format = 'NHWC'
