@@ -19,7 +19,7 @@ class Agent(BaseModel):
     self.sess = sess
     self.weight_dir = 'weights'
 
-    self.HEADSNUM = 2
+    self.HEADSNUM = config.heads_num
     self.batch_size = config.batch_size
 
     self.env = environment
@@ -43,13 +43,13 @@ class Agent(BaseModel):
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     data_file = open(self.prog_file, 'wb')
     data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
-                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,\n')
+                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm,\n')
     data_file.close()
 
   def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,l1_norm):
       fd = open(self.prog_file,'a')
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
-      fd.write('%f,%f,%f,%f,%f,%f\n' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5] ))
+      fd.write('%f,%f,%f,%f,%f,%f,%f,%f\n' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
       fd.close()
 
   def create_dir(self,p):
@@ -86,7 +86,8 @@ class Agent(BaseModel):
       # 2. act
       screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe
-      self.observe(screen, reward, action, terminal)
+      mask = np.random.randint(low=0,high=2,size=[self.HEADSNUM])
+      self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
         screen, reward, action, terminal = self.env.new_random_game()
@@ -163,7 +164,7 @@ class Agent(BaseModel):
     if self.memory.count < self.history_length:
       return
     else:
-      s_t, action, reward, s_t_plus_1, terminal = self.memory.sample()
+      s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample()
 
     if self.double_q:
       # Double Q-learning
@@ -188,14 +189,17 @@ class Agent(BaseModel):
         target_q_t_slice = target_q_t_slice.reshape(self.batch_size, 1)
         target_q_t = np.concatenate((target_q_t, target_q_t_slice), axis=1)
 
-      update_policy = np.random.randint(low=0, high=2, size=[self.HEADSNUM, 1])
       grads_weights_samp =  self.sess.run([x for x in self.grad_and_val_l1_norm], {
         self.target_q_t: target_q_t,
         self.action: action,
         self.s_t: s_t,
         self.learning_rate_step: self.step,
-        self.update_policy: update_policy
+        self.mask: mask
       })
+
+
+
+
       return grads_weights_samp
 
   def predict(self, s_t, current_head, test_ep=None):
@@ -205,6 +209,7 @@ class Agent(BaseModel):
 
     if random.random() < ep:
       action = random.randrange(self.env.action_size)
+      #action = self.q_action.eval({self.s_t: [s_t], self.head: current_head})[0]
     else:
       action = self.q_action.eval({self.s_t: [s_t],self.head: current_head})[0]
 
@@ -212,11 +217,11 @@ class Agent(BaseModel):
 
     return action
 
-  def observe(self, screen, reward, action, terminal):
+  def observe(self, screen, reward, action, terminal,mask):
     reward = max(self.min_reward, min(self.max_reward, reward))
 
     self.history.add(screen)
-    self.memory.add(screen, reward, action, terminal)
+    self.memory.add(screen, reward, action, terminal,mask)
 
     if self.step > self.learn_start:
       if self.step % self.train_frequency == 0:
@@ -229,7 +234,7 @@ class Agent(BaseModel):
     if self.memory.count < self.history_length:
       return
     else:
-      s_t, action, reward, s_t_plus_1, terminal = self.memory.sample()
+      s_t, action, reward, s_t_plus_1, terminal, mask = self.memory.sample()
 
     t = time.time()
     if self.double_q:
@@ -267,13 +272,12 @@ class Agent(BaseModel):
 
 
 
-      update_policy = np.random.randint(low=0,high=2,size=[self.HEADSNUM,1])
       _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
       self.target_q_t: target_q_t,
       self.action: action,
       self.s_t: s_t,
       self.learning_rate_step: self.step,
-      self.update_policy : update_policy,
+      self.mask : mask,
     })
 
     self.total_loss += loss
@@ -296,14 +300,14 @@ class Agent(BaseModel):
         self.s_t = tf.placeholder('float32',
             [None, self.history_length, self.screen_width, self.screen_height], name='s_t')
 
-      shape = self.s_t.get_shape().as_list()
-      self.s_t_flat = tf.reshape(self.s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
-
-      self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 32, activation_fn=activation_fn, name='l3')
-
+      self.l1, self.w['l1_w'], self.w['l1_b'] = conv2d(self.s_t,
+          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='l1')
+      self.l2, self.w['l2_w'], self.w['l2_b'] = conv2d(self.l1,
+          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='l2')
+      self.l3, self.w['l3_w'], self.w['l3_b'] = conv2d(self.l2,
+          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='l3')
 
       shape = self.l3.get_shape().as_list()
-
       self.l3_flat = tf.reshape(self.l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
 
       if self.dueling:
@@ -323,8 +327,8 @@ class Agent(BaseModel):
         self.q = self.value + (self.advantage - 
           tf.reduce_mean(self.advantage, reduction_indices=1, keep_dims=True))
       else:
-        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 32, activation_fn=activation_fn, name='l4')
-        self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.HEADSNUM * self.env.action_size, name='q')
+        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512, activation_fn=activation_fn, name='l4')
+        self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.env.action_size*self.HEADSNUM, name='q')
 
       self.head = tf.placeholder('int32', name='head')
       #self.q_action = tf.argmax(self.q, dimension=1)
@@ -341,11 +345,12 @@ class Agent(BaseModel):
         self.target_s_t = tf.placeholder('float32', 
             [None, self.history_length, self.screen_width, self.screen_height], name='target_s_t')
 
-
-      shape = self.target_s_t.get_shape().as_list()
-      self.target_s_t_flat = tf.reshape(self.target_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
-
-      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 32, activation_fn=activation_fn, name='target_l3')
+      self.target_l1, self.t_w['l1_w'], self.t_w['l1_b'] = conv2d(self.target_s_t,
+          32, [8, 8], [4, 4], initializer, activation_fn, self.cnn_format, name='target_l1')
+      self.target_l2, self.t_w['l2_w'], self.t_w['l2_b'] = conv2d(self.target_l1,
+          64, [4, 4], [2, 2], initializer, activation_fn, self.cnn_format, name='target_l2')
+      self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = conv2d(self.target_l2,
+          64, [3, 3], [1, 1], initializer, activation_fn, self.cnn_format, name='target_l3')
 
       shape = self.target_l3.get_shape().as_list()
       self.target_l3_flat = tf.reshape(self.target_l3, [-1, reduce(lambda x, y: x * y, shape[1:])])
@@ -368,9 +373,9 @@ class Agent(BaseModel):
           tf.reduce_mean(self.t_advantage, reduction_indices=1, keep_dims=True))
       else:
         self.target_l4, self.t_w['l4_w'], self.t_w['l4_b'] = \
-            linear(self.target_l3_flat, 32, activation_fn=activation_fn, name='target_l4')
+            linear(self.target_l3_flat, 512, activation_fn=activation_fn, name='target_l4')
         self.target_q, self.t_w['q_w'], self.t_w['q_b'] = \
-            linear(self.target_l4, self.HEADSNUM * self.env.action_size, name='target_q')
+            linear(self.target_l4, self.env.action_size*self.HEADSNUM, name='target_q')
 
       self.target_q_idx = tf.placeholder('int32', [None, None], 'outputs_idx')
       self.target_q_with_idx = tf.gather_nd(self.target_q, self.target_q_idx)
@@ -393,17 +398,17 @@ class Agent(BaseModel):
         action_one_hot_slice = tf.one_hot(self.action, self.env.action_size, 1.0, 0.0, name='action_one_hot')
         q_slice = tf.slice(self.q,[0,k*self.env.action_size],[-1,self.env.action_size])
         q_acted_slice = tf.reduce_sum(q_slice * action_one_hot_slice, reduction_indices=1, name='q_acted')
-        q_acted_slice = tf.reshape(q_acted_slice,[32,1])
+        q_acted_slice = tf.reshape(q_acted_slice,[self.batch_size,1])
         q_acted_l.append(q_acted_slice)
 
       q_acted = tf.concat(1,q_acted_l)
 
       self.delta = self.target_q_t - q_acted
 
-      self.update_policy = tf.placeholder('float32',shape=[self.HEADSNUM,1],name='update_policy')
-      self.delta_up = tf.matmul(self.delta,self.update_policy)
+      self.mask = tf.placeholder('float32',shape=[self.batch_size,self.HEADSNUM],name='mask')
+      #self.delta_up = tf.mul(self.delta, self.mask)
 
-      self.clipped_delta = tf.clip_by_value(self.delta_up, self.min_delta, self.max_delta, name='clipped_delta')
+      self.clipped_delta = tf.clip_by_value(self.delta, self.min_delta, self.max_delta, name='clipped_delta')
 
       self.global_step = tf.Variable(0, trainable=False)
 
@@ -426,13 +431,14 @@ class Agent(BaseModel):
       l1_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][0]),name='l1_grad_l1_norm')
       l2_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][0]),name='l2_grad_l1_norm')
       l3_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][0]),name='l3_grad_l1_norm')
+      l4_grad_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][0]),name='l4_grad_l1_norm')
 
       l1_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[0][1]),name='l1_l1_norm')
       l2_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[2][1]),name='l2_l1_norm')
       l3_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[4][1]),name='l3_l1_norm')
+      l4_l1_norm = tf.reduce_mean(tf.abs(self.comp_grads_and_vars[6][1]), name='l4_l1_norm')
 
-
-      self.grad_and_val_l1_norm = [l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm]
+      self.grad_and_val_l1_norm = [l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm]
 
 
     with tf.variable_scope('summary'):
@@ -460,8 +466,6 @@ class Agent(BaseModel):
 
     self.load_model()
     self.update_target_q_network()
-
-
 
   def update_target_q_network(self):
     for name in self.w.keys():

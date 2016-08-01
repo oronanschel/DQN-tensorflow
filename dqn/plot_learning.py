@@ -8,8 +8,8 @@ import numpy as np
 def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
 
   reward_tags = {'avg_reward','avg_ep_reward', 'min_ep_reward','max_ep_reward'}
-  grad_norm_tags = {'l1_grad_l1_norm','l2_grad_l1_norm','l3_grad_l1_norm'}
-  weight_norm_tags = {'l1_l1_norm','l2_l1_norm','l3_l1_norm'}
+  grad_norm_tags = {'l1_grad_l1_norm','l2_grad_l1_norm','l3_grad_l1_norm','l4_grad_l1_norm'}
+  weight_norm_tags = {'l1_l1_norm','l2_l1_norm','l3_l1_norm','l4_l1_norm'}
   tags_1 = {'avg_loss', 'avg_q','epsilon'}
   tags_2 = {'num_game'}
 
@@ -30,10 +30,12 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
     l1_grad_l1_norm = []
     l2_grad_l1_norm = []
     l3_grad_l1_norm = []
+    l4_grad_l1_norm = []
 
     l1_l1_norm =[]
     l2_l1_norm =[]
     l3_l1_norm = []
+    l4_l1_norm = []
     for row in reader:
         avg_reward.append(row['avg_reward'])
         avg_loss.append(float(row['avg_loss']))
@@ -47,10 +49,13 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
         l1_grad_l1_norm.append(row['l1_grad_l1_norm'])
         l2_grad_l1_norm.append(row['l2_grad_l1_norm'])
         l3_grad_l1_norm.append(row['l3_grad_l1_norm'])
+        l4_grad_l1_norm.append(row['l4_grad_l1_norm'])
 
         l1_l1_norm.append(row['l1_l1_norm'])
         l2_l1_norm.append(row['l2_l1_norm'])
         l3_l1_norm.append(row['l3_l1_norm'])
+        l4_l1_norm.append(row['l4_l1_norm'])
+
 
   pp = PdfPages(save_loc)
 

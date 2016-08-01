@@ -10,11 +10,15 @@ from utils import save_npy, load_npy
 class ReplayMemory:
   def __init__(self, config, model_dir):
     self.model_dir = model_dir
+    self.HEADSNUM = config.heads_num
 
     self.cnn_format = config.cnn_format
     self.memory_size = config.memory_size
     self.actions = np.empty(self.memory_size, dtype = np.uint8)
     self.rewards = np.empty(self.memory_size, dtype = np.integer)
+
+    self.masks = np.empty((self.memory_size,self.HEADSNUM), dtype=np.float32)
+
     self.screens = np.empty((self.memory_size, config.screen_width, config.screen_height), dtype = np.float16)
     self.terminals = np.empty(self.memory_size, dtype = np.bool)
     self.history_length = config.history_length
@@ -27,13 +31,14 @@ class ReplayMemory:
     self.prestates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
     self.poststates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
 
-  def add(self, screen, reward, action, terminal):
+  def add(self, screen, reward, action, terminal,mask):
     assert screen.shape == self.dims
     # NB! screen is post-state, after action and reward
     self.actions[self.current] = action
     self.rewards[self.current] = reward
     self.screens[self.current, ...] = screen
     self.terminals[self.current] = terminal
+    self.masks[self.current] = mask
     self.count = max(self.count, self.current + 1)
     self.current = (self.current + 1) % self.memory_size
 
@@ -78,21 +83,22 @@ class ReplayMemory:
     actions = self.actions[indexes]
     rewards = self.rewards[indexes]
     terminals = self.terminals[indexes]
+    masks  = self.masks[indexes]
 
     if self.cnn_format == 'NHWC':
       return np.transpose(self.prestates, (0, 2, 3, 1)), actions, \
-        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals
+        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals , masks
     else:
-      return self.prestates, actions, rewards, self.poststates, terminals
+      return self.prestates, actions, rewards, self.poststates, terminals , masks
 
   def save(self):
     for idx, (name, array) in enumerate(
-        zip(['actions', 'rewards', 'screens', 'terminals', 'prestates', 'poststates'],
-            [self.actions, self.rewards, self.screens, self.terminals, self.prestates, self.poststates])):
+        zip(['actions', 'rewards', 'screens', 'terminals', 'prestates', 'poststates','masks'],
+            [self.actions, self.rewards, self.screens, self.terminals, self.prestates, self.poststates,self.masks])):
       save_npy(array, os.path.join(self.model_dir, name))
 
   def load(self):
     for idx, (name, array) in enumerate(
-        zip(['actions', 'rewards', 'screens', 'terminals', 'prestates', 'poststates'],
-            [self.actions, self.rewards, self.screens, self.terminals, self.prestates, self.poststates])):
+        zip(['actions', 'rewards', 'screens', 'terminals', 'prestates', 'poststates','masks'],
+            [self.actions, self.rewards, self.screens, self.terminals, self.prestates, self.poststates,self.masks])):
       array = load_npy(os.path.join(self.model_dir, name))
