@@ -37,19 +37,19 @@ class AgentConfig(object):
   heads_num = 5
 
   # ToyProblem
-  ToyProblem = False
+  ToyProblem = True
 
 class EnvironmentConfig(object):
   env_name = 'Breakout-v0'
 
+  ToyProblem = True
+  if ToyProblem:
+    screen_width  = 15
+    screen_height = 1
+  else:
+    screen_width  = 84
+    screen_height = 84
 
-  # for toy
-  # screen_width  = 15
-  # screen_height = 1
-
-  # # for atari
-  screen_width  = 84
-  screen_height = 84
   max_reward = 1.
   min_reward = -1.
 
