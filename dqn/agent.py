@@ -43,13 +43,16 @@ class Agent(BaseModel):
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     data_file = open(self.prog_file, 'wb')
     data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
-                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm,\n')
+                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
+                    ',succ_counts,lr,step,\n')
     data_file.close()
 
-  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,l1_norm):
+  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
+                     l1_norm,succ_counts,lr,step):
       fd = open(self.prog_file,'a')
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
-      fd.write('%f,%f,%f,%f,%f,%f,%f,%f\n' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
+      fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
+      fd.write('%d,%f,%d\n' % (succ_counts,lr,step))
       fd.close()
 
   def create_dir(self,p):
@@ -60,52 +63,72 @@ class Agent(BaseModel):
         raise  # This was not a "directory exist" error..
 
   def train(self):
-    start_step = self.step_op.eval()
-    start_time = time.time()
+    start_step = 0
+    # start_time = time.time()
 
     num_game, self.update_count, ep_reward = 0, 0, 0.
     total_reward, self.total_loss, self.total_q = 0., 0., 0.
     max_avg_ep_reward = 0
     ep_rewards, actions = [], []
+    max_ep_reward_count = 0
+    num_game = 0
 
     screen, reward, action, terminal = self.env.new_random_game()
 
     for _ in range(self.history_length):
       self.history.add(screen)
 
+    self.current_head = 0
+    self.max_ep_reward_flag = False
+
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
 
-      current_head = 0
-      if self.step == self.learn_start:
-        num_game, self.update_count, ep_reward = 0, 0, 0.
-        total_reward, self.total_loss, self.total_q = 0., 0., 0.
-        ep_rewards, actions = [], []
+      # if self.step == self.learn_start:
+      #   num_game, self.update_count, ep_reward = 0, 0, 0.
+      #   total_reward, self.total_loss, self.total_q = 0., 0., 0.
+      #   ep_rewards, actions = [], []
 
       # 1. predict
-      action = self.predict(self.history.get(),current_head)
+      action = self.predict(self.history.get(),self.current_head)
       # 2. act
       screen, reward, terminal = self.env.act(action, is_training=True)
-      # 3. observe
-      mask = np.random.randint(low=0,high=2,size=[self.HEADSNUM])
+      # 3. observe + learn
+      mask = np.random.binomial(1,0.51,size=[self.HEADSNUM])
+
       self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
+        # check if episode reward = max possible reward
+        if ep_reward == self.config.max_ep_possible_reward:
+          max_ep_reward_count +=1
+          if (max_ep_reward_count % 5 == 0):
+            self.max_ep_reward_flag = True
+          # check if success cretira was met
+          if(max_ep_reward_count==self.config.succ_max):
+            print('')
+            print(num_game)
+            return
         screen, reward, action, terminal = self.env.new_random_game()
-
         num_game += 1
+        if(num_game==3000):
+          print('')
+          print(num_game)
+          return
+
         ep_rewards.append(ep_reward)
         ep_reward = 0.
-
         # replace playing head
-        current_head = np.random.randint(self.HEADSNUM)
+        self.current_head = np.random.randint(self.HEADSNUM)
+
       else:
         ep_reward += reward
 
-      actions.append(action)
+      # actions.append(action)
       total_reward += reward
 
       if self.step >= self.learn_start:
-        if self.step % self.test_step == self.test_step - 1:
+        if (self.step % self.test_step == self.test_step - 1) or (self.max_ep_reward_flag):
+          self.max_ep_reward_flag = False
           avg_reward = total_reward / self.test_step
           avg_loss = self.total_loss / self.update_count
           avg_q = self.total_q / self.update_count
@@ -117,12 +140,12 @@ class Agent(BaseModel):
           except:
             max_ep_reward, min_ep_reward, avg_ep_reward = 0, 0, 0
 
-          print '\navg_r: %.4f, avg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
-              % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+          print '\nmax_ep_r_cnt:%d  avg_r: %.4f, avg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
+              % (max_ep_reward_count,avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
 
           if max_avg_ep_reward * 0.9 <= avg_ep_reward:
             self.step_assign_op.eval({self.step_input: self.step + 1})
-            self.save_model(self.step + 1)
+            # self.save_model(self.step + 1)
 
             max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
 
@@ -130,9 +153,11 @@ class Agent(BaseModel):
             # gradients, weights sample
             g_w_l1_norm = self.gradient_weights_l1_norm()
 
+            lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
             ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
-            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep_rec,g_w_l1_norm)
+            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
+                                ep_rec,g_w_l1_norm,max_ep_reward_count,lr,self.step)
 
             plot(self.mydir)
             '''
@@ -151,14 +176,13 @@ class Agent(BaseModel):
             '''
 
 
-          num_game = 0
-          total_reward = 0.
-          self.total_loss = 0.
-          self.total_q = 0.
-          self.update_count = 0
-          ep_reward = 0.
-          ep_rewards = []
-          actions = []
+          # num_game = 0
+          # total_reward = 0.
+          # self.total_loss = 0.
+          # self.total_q = 0.
+          # self.update_count = 0
+          # ep_reward = 0.
+          # ep_rewards = []
 
   def gradient_weights_l1_norm(self):
     if self.memory.count < self.history_length:
@@ -206,7 +230,6 @@ class Agent(BaseModel):
     ep = test_ep or (self.ep_end +
         max(0., (self.ep_start - self.ep_end)
           * (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
-
     if random.random() < ep:
       action = random.randrange(self.env.action_size)
     else:
@@ -485,7 +508,7 @@ class Agent(BaseModel):
 
     self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=30)
 
-    self.load_model()
+    # self.load_model()
     self.update_target_q_network()
 
   def update_target_q_network(self):
