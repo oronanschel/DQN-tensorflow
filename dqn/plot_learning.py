@@ -7,6 +7,9 @@ import numpy as np
 
 def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
 
+
+  counts_tag = {'succ_counts'}
+  lr_tag = {'lr'}
   reward_tags = {'avg_reward','avg_ep_reward', 'min_ep_reward','max_ep_reward'}
   grad_norm_tags = {'l1_grad_l1_norm','l2_grad_l1_norm','l3_grad_l1_norm','l4_grad_l1_norm'}
   weight_norm_tags = {'l1_l1_norm','l2_l1_norm','l3_l1_norm','l4_l1_norm'}
@@ -36,6 +39,10 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
     l2_l1_norm =[]
     l3_l1_norm = []
     l4_l1_norm = []
+
+    succ_counts =[]
+    lr =[]
+    step = []
     for row in reader:
         avg_reward.append(row['avg_reward'])
         avg_loss.append(float(row['avg_loss']))
@@ -56,16 +63,27 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
         l3_l1_norm.append(row['l3_l1_norm'])
         l4_l1_norm.append(row['l4_l1_norm'])
 
-
+        succ_counts.append(row['succ_counts'])
+        lr.append(row['lr'])
+        step.append(row['step'])
   pp = PdfPages(save_loc)
+  # counts
+  for tag in counts_tag:
+      plt.figure()
+      plt.title(tag)
+      plt.plot(step,eval(tag), label=tag)
+      plt.xlabel('step')
+      plt.legend(loc='best')
+      plt.savefig(pp, format='pdf')
+      plt.close()
 
   # print(avg_reward)
   plt.figure()
   plt.title("Reward Stats")
   for tag in reward_tags:
-    plt.plot(eval(tag), label=tag)
+    plt.plot(step,eval(tag), label=tag)
 
-  plt.xlabel('eval itr')
+  plt.xlabel('step')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -75,8 +93,8 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
   for tag in tags_1:
       plt.figure()
       plt.title(tag)
-      plt.plot(eval(tag), label=tag)
-      plt.xlabel('eval itr')
+      plt.plot(step,eval(tag), label=tag)
+      plt.xlabel('step')
       plt.legend(loc='best')
       plt.savefig(pp, format='pdf')
       plt.close()
@@ -87,9 +105,9 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
   plt.figure()
   plt.title("Grad L1 norm")
   for tag in grad_norm_tags:
-    plt.plot(eval(tag), label=tag)
+    plt.plot(step,eval(tag), label=tag)
 
-  plt.xlabel('eval itr')
+  plt.xlabel('step')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -99,12 +117,23 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
   plt.figure()
   plt.title("Weights L1 norm")
   for tag in weight_norm_tags:
-    plt.plot(eval(tag), label=tag)
+    plt.plot(step,eval(tag), label=tag)
 
-  plt.xlabel('eval itr')
+  plt.xlabel('step')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
+
+  # learning rate
+  for tag in lr_tag:
+      plt.figure()
+      plt.title(tag)
+      plt.plot(step,eval(tag), label=tag)
+      plt.xlabel('step')
+      plt.legend(loc='best')
+      plt.savefig(pp, format='pdf')
+      plt.close()
+
 
 
 
