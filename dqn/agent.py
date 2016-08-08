@@ -44,15 +44,23 @@ class Agent(BaseModel):
     data_file = open(self.prog_file, 'wb')
     data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
                     'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
-                    ',succ_counts,lr,step,\n')
+                    ',succ_counts,lr,step'
+                    ',q0_0,q1_0,q2_0,q3_0,q4_0,q5_0,q6_0,q7_0,q8_0,q9_0'
+                    ',q0_1,q1_1,q2_1,q3_1,q4_1,q5_1,q6_1,q7_1,q8_1,q9_1\n')
     data_file.close()
 
   def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
-                     l1_norm,succ_counts,lr,step):
+                     l1_norm,succ_counts,lr,step,q):
       fd = open(self.prog_file,'a')
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
-      fd.write('%d,%f,%d\n' % (succ_counts,lr,step))
+      fd.write('%d,%f,%d,' % (succ_counts,lr,step))
+      for i in range(0,10):
+        fd.write('%f,' % (q[i][0]))
+      for i in range(0, 10):
+        fd.write('%f,' % (q[i][1]))
+
+      fd.write('\n' % (q[i][1]))
       fd.close()
 
   def create_dir(self,p):
@@ -98,22 +106,10 @@ class Agent(BaseModel):
       self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
-        # check if episode reward = max possible reward
-        if ep_reward == self.config.max_ep_possible_reward:
-          # max_ep_reward_count +=1
-          if (max_ep_reward_count % 5 == 0):
-            self.max_ep_reward_flag = True
-          # check if success cretira was met
-          if(max_ep_reward_count==self.config.succ_max):
-            print('')
-            # print(num_game)
-            return
+        num_game +=1
+        ep_reward += reward
+
         screen, reward, action, terminal = self.env.new_random_game()
-        num_game += 1
-        if(num_game==3000):
-          print('')
-          print(num_game)
-          # return
 
         ep_rewards.append(ep_reward)
         ep_reward = 0.
@@ -151,13 +147,13 @@ class Agent(BaseModel):
 
           if self.step > 180:
             # gradients, weights sample
-            g_w_l1_norm = self.gradient_weights_l1_norm()
+            g_w_l1_norm, q = self.gradient_weights_l1_norm()
 
             lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
             ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
             self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                                ep_rec,g_w_l1_norm,max_ep_reward_count,lr,self.step)
+                                ep_rec,g_w_l1_norm,max_ep_reward_count,lr,self.step,q)
 
             plot(self.mydir)
             '''
@@ -231,21 +227,25 @@ class Agent(BaseModel):
         self.mask: mask
       })
 
-      # last state q:
-      s_t_last = np.zeros(shape=[1,1,10,1],dtype=np.float16)
-      s_t_last[0][0][5] = 1
-      q_t_plus_1 = self.q.eval({self.s_t: s_t_last})
-      q_zero_plus_1 = self.zero_q.eval({self.zero_s_t: s_t_last})
+      # q eval:
+      s_t_test = np.zeros(shape=[10,1,10,1],dtype=np.float16)
+      for i in range(0,10):
+        s_t_test [i][0][i] = 1
 
-      print("-------")
-      print("q_t_plus_1:"+str(q_t_plus_1))
-      print("q_zero_plus_1:"+str(q_zero_plus_1))
-      print("diff:"+str(q_t_plus_1-q_zero_plus_1))
+      q_t_test = self.q.eval({self.s_t: s_t_test})
+      q_zero_test = self.zero_q.eval({self.zero_s_t: s_t_test})
+      '''
+            print('---------')
+            print(q_t_test)
+            print(q_zero_test)
+            print('---------')
+      '''
 
-      print("-------")
 
+      q = q_t_test - q_zero_test
+      # q = q_t_test
 
-      return grads_weights_samp
+      return grads_weights_samp , q
 
   def predict(self, s_t, current_head, test_ep=None):
     ep = test_ep or (self.ep_end +
@@ -338,6 +338,10 @@ class Agent(BaseModel):
     self.zero_w = {}
 
     initializer = tf.truncated_normal_initializer(0, 0.02)
+    # linear_std_init = 0.02
+    # linear_bias_init = 0
+    linear_std_init = 0.02
+    linear_bias_init = 0
     activation_fn = tf.nn.relu
 
     # zero network
@@ -352,7 +356,7 @@ class Agent(BaseModel):
       if self.config.ToyProblem:
         shape = self.zero_s_t.get_shape().as_list()
         self.zero_s_t_flat = tf.reshape(self.zero_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
-        self.zero_l3, self.zero_w['l3_w'], self.zero_w['l3_b'] = linear(self.zero_s_t_flat, 128, activation_fn=activation_fn, name='zero_l3')
+        self.zero_l3, self.zero_w['l3_w'], self.zero_w['l3_b'] = linear(self.zero_s_t_flat,128,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='zero_l3')
 
       else:
         self.zero_l1, self.zero_w['l1_w'], self.zero_w['l1_b'] = conv2d(self.zero_s_t,
@@ -367,11 +371,17 @@ class Agent(BaseModel):
 
 
       self.zero_l4, self.zero_w['l4_w'], self.zero_w['l4_b'] = \
-          linear(self.zero_l3_flat, 512, activation_fn=activation_fn, name='zero_l4')
+          linear(self.zero_l3_flat, 512,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='zero_l4')
       self.zero_q_tmp, self.zero_w['q_w'], self.zero_w['q_b'] = \
-          linear(self.zero_l4, self.env.action_size*self.HEADSNUM, name='zero_q')
-      self.zero_q = tf.scalar_mul(1,self.zero_q_tmp)
+          linear(self.zero_l4, self.env.action_size*self.HEADSNUM,stddev=linear_std_init, bias_start=linear_bias_init, name='zero_q')
 
+
+      q_slice_left = tf.slice(self.zero_q_tmp,[0,0],[-1,1])
+      q_slice_right= tf.slice(self.zero_q_tmp,[0,1],[-1,1])
+
+
+      self.zero_q_c = tf.concat(1,[q_slice_left,q_slice_right])
+      self.zero_q = tf.scalar_mul(1,self.zero_q_c)
 
     # training network
     with tf.variable_scope('prediction'):
@@ -387,7 +397,7 @@ class Agent(BaseModel):
       if self.config.ToyProblem:
         shape = self.s_t.get_shape().as_list()
         self.s_t_flat = tf.reshape(self.s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
-        self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 128, activation_fn=activation_fn, name='l3')
+        self.l3, self.w['l3_w'], self.w['l3_b'] = linear(self.s_t_flat, 128,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='l3')
 
       else:
         self.l1, self.w['l1_w'], self.w['l1_b'] = conv2d(self.s_t,
@@ -418,8 +428,8 @@ class Agent(BaseModel):
         self.q = self.value + (self.advantage - 
           tf.reduce_mean(self.advantage, reduction_indices=1, keep_dims=True))
       else:
-        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512, activation_fn=activation_fn, name='l4')
-        self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.env.action_size*self.HEADSNUM, name='q')
+        self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='l4')
+        self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.env.action_size*self.HEADSNUM,stddev=linear_std_init, bias_start=linear_bias_init, name='q')
 
       self.head = tf.placeholder('int32', name='head')
       #self.q_action = tf.argmax(self.q, dimension=1)
@@ -439,7 +449,7 @@ class Agent(BaseModel):
       if self.config.ToyProblem:
         shape = self.target_s_t.get_shape().as_list()
         self.target_s_t_flat = tf.reshape(self.target_s_t, [-1, reduce(lambda x, y: x * y, shape[1:])])
-        self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 128, activation_fn=activation_fn, name='target_l3')
+        self.target_l3, self.t_w['l3_w'], self.t_w['l3_b'] = linear(self.target_s_t_flat, 128,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='target_l3')
 
       else:
         self.target_l1, self.t_w['l1_w'], self.t_w['l1_b'] = conv2d(self.target_s_t,
@@ -470,9 +480,9 @@ class Agent(BaseModel):
           tf.reduce_mean(self.t_advantage, reduction_indices=1, keep_dims=True))
       else:
         self.target_l4, self.t_w['l4_w'], self.t_w['l4_b'] = \
-            linear(self.target_l3_flat, 512, activation_fn=activation_fn, name='target_l4')
+            linear(self.target_l3_flat, 512,stddev=linear_std_init, bias_start=linear_bias_init, activation_fn=activation_fn, name='target_l4')
         self.target_q, self.t_w['q_w'], self.t_w['q_b'] = \
-            linear(self.target_l4, self.env.action_size*self.HEADSNUM, name='target_q')
+            linear(self.target_l4, self.env.action_size*self.HEADSNUM,stddev=linear_std_init, bias_start=linear_bias_init, name='target_q')
 
       self.target_q_idx = tf.placeholder('int32', [None, None], 'outputs_idx')
       self.target_q_with_idx = tf.gather_nd(self.target_q, self.target_q_idx)

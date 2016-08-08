@@ -9,15 +9,16 @@ class AgentConfig(object):
   random_start = 30
   cnn_format = 'NCHW'
   discount = 0.99
-  target_q_update_step = scale/4
+  target_q_update_step = 20000
   learning_rate = 0.00025
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
   learning_rate_decay_step = 10000
 
-  ep_end = 0.001
+  # ep_end = 0.01
+  ep_end = 0.01
   ep_start = 1.
-  ep_end_t = scale
+  ep_end_t = scale*3
 
   # history_length = 4
   history_length = 1
@@ -31,7 +32,7 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  _test_step =  1000
+  _test_step =  2500
   _save_step = _test_step * 10
 
   # Bootstrap
