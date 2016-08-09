@@ -15,7 +15,7 @@ class AgentConfig(object):
   learning_rate_decay = 0.96
   learning_rate_decay_step = 10000
 
-  ep_end = 0.001
+  ep_end = 0.01
   ep_start = 1.
   ep_end_t = scale
 
@@ -33,19 +33,21 @@ class AgentConfig(object):
   _save_step = _test_step * 10
 
   # Bootstrap
-  heads_num = 50
+  heads_num = 1
+  p = 1
 
   # ToyProblem
   ToyProblem = True
   max_ep_possible_reward = 10
   succ_max = 100
+  max_state = 10
 
 class EnvironmentConfig(object):
   env_name = 'Breakout-v0'
 
   ToyProblem = True
   if ToyProblem:
-    screen_width  = 25
+    screen_width  = 100
     screen_height = 1
   else:
     screen_width  = 84

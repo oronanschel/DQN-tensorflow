@@ -16,8 +16,10 @@ from utils import get_time, save_pkl, load_pkl
 class Agent(BaseModel):
   def __init__(self, config, environment, sess):
     super(Agent, self).__init__(config)
+    self.chain_len = config.max_state
     self.sess = sess
     self.weight_dir = 'weights'
+    self.p = config.p
 
     self.HEADSNUM = config.heads_num
     self.batch_size = config.batch_size
@@ -42,10 +44,16 @@ class Agent(BaseModel):
     self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     data_file = open(self.prog_file, 'wb')
-    data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
-                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
-                    ',succ_counts,lr,step,\n')
+    # data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
+    #                 'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
+    #                 ',succ_counts,lr,step,\n')
+    data_file.write('chain_len,p,tot_ep_until_100,heads_num,\n')
     data_file.close()
+
+  def write_summary(self,tot_ep_until_100):
+      fd = open(self.prog_file, 'a')
+      fd.write('%d,%f,%d,%d,\n' % (self.chain_len,self.p,tot_ep_until_100,self.HEADSNUM))
+      fd.close()
 
   def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
                      l1_norm,succ_counts,lr,step):
@@ -62,9 +70,13 @@ class Agent(BaseModel):
       if e.errno != 17:
         raise  # This was not a "directory exist" error..
 
-  def train(self):
+  def train(self,_env,config):
+    tf.initialize_all_variables().run()
+    self.update_target_q_network()
+    self.env = _env
+    self.chain_len = config.max_state
+    self.p = config.p
     start_step = 0
-    # start_time = time.time()
 
     num_game, self.update_count, ep_reward = 0, 0, 0.
     total_reward, self.total_loss, self.total_q = 0., 0., 0.
@@ -81,19 +93,16 @@ class Agent(BaseModel):
     self.current_head = 0
     self.max_ep_reward_flag = False
 
-    for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
-
-      # if self.step == self.learn_start:
-      #   num_game, self.update_count, ep_reward = 0, 0, 0.
-      #   total_reward, self.total_loss, self.total_q = 0., 0., 0.
-      #   ep_rewards, actions = [], []
+    # for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
+    for self.step in range(start_step, self.max_step):
 
       # 1. predict
       action = self.predict(self.history.get(),self.current_head)
       # 2. act
       screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe + learn
-      mask = np.random.binomial(1,0.51,size=[self.HEADSNUM])
+      mask = np.random.binomial(1,self.p,size=[self.HEADSNUM])
+
 
       self.observe(screen, reward, action, terminal,mask)
 
@@ -101,18 +110,17 @@ class Agent(BaseModel):
         # check if episode reward = max possible reward
         if ep_reward == self.config.max_ep_possible_reward:
           max_ep_reward_count +=1
-          if (max_ep_reward_count % 5 == 0):
-            self.max_ep_reward_flag = True
+          print(reward)
+          print(screen)
           # check if success cretira was met
           if(max_ep_reward_count==self.config.succ_max):
-            print('')
-            print(num_game)
+            self.write_summary(num_game)
             return
+
         screen, reward, action, terminal = self.env.new_random_game()
         num_game += 1
-        if(num_game==3000):
-          print('')
-          print(num_game)
+        if(num_game==2000):
+          self.write_summary(num_game)
           return
 
         ep_rewards.append(ep_reward)
@@ -127,7 +135,7 @@ class Agent(BaseModel):
       total_reward += reward
 
       if self.step >= self.learn_start:
-        if (self.step % self.test_step == self.test_step - 1) or (self.max_ep_reward_flag):
+        if (self.step % self.test_step == self.test_step - 1) :
           self.max_ep_reward_flag = False
           avg_reward = total_reward / self.test_step
           avg_loss = self.total_loss / self.update_count
@@ -149,40 +157,6 @@ class Agent(BaseModel):
 
             max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
 
-          if self.step > 180:
-            # gradients, weights sample
-            g_w_l1_norm = self.gradient_weights_l1_norm()
-
-            lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
-
-            ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
-            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                                ep_rec,g_w_l1_norm,max_ep_reward_count,lr,self.step)
-
-            plot(self.mydir)
-            '''
-                        self.inject_summary({
-                'average.reward': avg_reward,
-                'average.loss': avg_loss,
-                'average.q': avg_q,
-                'episode.max reward': max_ep_reward,
-                'episode.min reward': min_ep_reward,
-                'episode.avg reward': avg_ep_reward,
-                'episode.num of game': num_game,
-                'episode.rewards': ep_rewards,
-                'episode.actions': actions,
-                'training.learning_rate': self.learning_rate_op.eval({self.learning_rate_step: self.step}),
-              }, self.step)
-            '''
-
-
-          # num_game = 0
-          # total_reward = 0.
-          # self.total_loss = 0.
-          # self.total_q = 0.
-          # self.update_count = 0
-          # ep_reward = 0.
-          # ep_rewards = []
 
   def gradient_weights_l1_norm(self):
     if self.memory.count < self.history_length:

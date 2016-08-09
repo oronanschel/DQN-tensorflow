@@ -1,12 +1,12 @@
 import random
 import tensorflow as tf
-
+from tqdm import tqdm
 from dqn.agent import Agent
 
 from dqn.environment import GymEnvironment
 from dqn.Myenvironment import MyGymEnvironment
 from config import get_config
-
+from tensorflow.python.framework import ops
 flags = tf.app.flags
 
 # Model
@@ -23,9 +23,9 @@ flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
 flags.DEFINE_string('gpu_fraction', '9/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
+
 import numpy as np
 rand = np.random.randint(10,200)
-print('rand seed:'+str(rand))
 flags.DEFINE_integer('random_seed', rand, 'Value of random seed')
 
 FLAGS = flags.FLAGS
@@ -46,26 +46,28 @@ def calc_gpu_fraction(fraction_string):
   return fraction
 
 def main(_):
+
   gpu_options = tf.GPUOptions(
       per_process_gpu_memory_fraction=calc_gpu_fraction(FLAGS.gpu_fraction))
 
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
-
-    if config.ToyProblem:
-      env = MyGymEnvironment(config)
-    else:
-      env = GymEnvironment(config)
-
     if not FLAGS.use_gpu:
       config.cnn_format = 'NHWC'
 
+    env = MyGymEnvironment(config)
     agent = Agent(config, env, sess)
+    # for chain_len in range(10,100,2):
+    for chain_len in tqdm(range(30,100,2), ncols=70, initial=0):
+      config.max_state = chain_len
+      env = MyGymEnvironment(config)
+      for _ in range(0,3):
+        rand = np.random.randint(10, 200)
+        tf.set_random_seed(rand)
+        random.seed(rand)
+        agent.train(env,config)
 
-    if FLAGS.is_train:
-      agent.train()
-    else:
-      agent.play()
+
 
 if __name__ == '__main__':
   tf.app.run()
