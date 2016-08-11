@@ -2,7 +2,7 @@ import random
 import tensorflow as tf
 from tqdm import tqdm
 from dqn.agent import Agent
-
+import sys
 from dqn.environment import GymEnvironment
 from dqn.Myenvironment import MyGymEnvironment
 from config import get_config
@@ -55,17 +55,19 @@ def main(_):
     if not FLAGS.use_gpu:
       config.cnn_format = 'NHWC'
 
+
+    print("args:"+str(sys.argv))
+    config.folder_name = sys.argv[1]
+    config.max_state = int(sys.argv[2])
+    config.heads_num = int(sys.argv[3])
+    config.p = float(sys.argv[4])
+    config.screen_1_hot = sys.argv[5] == 'True'
+
+
     env = MyGymEnvironment(config)
     agent = Agent(config, env, sess)
-    # for chain_len in range(10,100,2):
-    for chain_len in tqdm(range(30,100,2), ncols=70, initial=0):
-      config.max_state = chain_len
-      env = MyGymEnvironment(config)
-      for _ in range(0,3):
-        rand = np.random.randint(10, 200)
-        tf.set_random_seed(rand)
-        random.seed(rand)
-        agent.train(env,config)
+    env = MyGymEnvironment(config)
+    agent.train(env,config)
 
 
 

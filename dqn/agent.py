@@ -16,10 +16,13 @@ from utils import get_time, save_pkl, load_pkl
 class Agent(BaseModel):
   def __init__(self, config, environment, sess):
     super(Agent, self).__init__(config)
+    if hasattr(config,'folder_name'):
+      self.folder_name = config.folder_name
     self.chain_len = config.max_state
     self.sess = sess
     self.weight_dir = 'weights'
     self.p = config.p
+    self.screen_1_hot = config.screen_1_hot
 
     self.HEADSNUM = config.heads_num
     self.batch_size = config.batch_size
@@ -39,20 +42,25 @@ class Agent(BaseModel):
   def create_results_file(self):
     tempdir = os.path.join(os.getcwd(), "models")
     self.create_dir(tempdir)
-    folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    if hasattr(self, 'folder_name'):
+      folder_name = self.folder_name
+    else:
+      folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     self.mydir = os.path.join(tempdir, folder_name)
-    self.create_dir(self.mydir)
+    new_folder = self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
-    data_file = open(self.prog_file, 'wb')
-    # data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
-    #                 'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
-    #                 ',succ_counts,lr,step,\n')
-    data_file.write('chain_len,p,tot_ep_until_100,heads_num,\n')
-    data_file.close()
+
+    if new_folder:
+      data_file = open(self.prog_file, 'wb')
+      # data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
+      #                 'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
+      #                 ',succ_counts,lr,step,\n')
+      data_file.write('chain_len,p,tot_ep_until_100,heads_num,1_hot\n')
+      data_file.close()
 
   def write_summary(self,tot_ep_until_100):
       fd = open(self.prog_file, 'a')
-      fd.write('%d,%f,%d,%d,\n' % (self.chain_len,self.p,tot_ep_until_100,self.HEADSNUM))
+      fd.write('%d,%f,%d,%d,%r,\n' % (self.chain_len,self.p,tot_ep_until_100,self.HEADSNUM,self.screen_1_hot))
       fd.close()
 
   def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
@@ -66,13 +74,13 @@ class Agent(BaseModel):
   def create_dir(self,p):
     try:
       os.makedirs(p)
+      return True
     except OSError, e:
-      if e.errno != 17:
-        raise  # This was not a "directory exist" error..
+      return False
+
 
   def train(self,_env,config):
-    tf.initialize_all_variables().run()
-    self.update_target_q_network()
+
     self.env = _env
     self.chain_len = config.max_state
     self.p = config.p
@@ -102,16 +110,14 @@ class Agent(BaseModel):
       screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe + learn
       mask = np.random.binomial(1,self.p,size=[self.HEADSNUM])
-
-
       self.observe(screen, reward, action, terminal,mask)
+
 
       if terminal:
         # check if episode reward = max possible reward
         if ep_reward == self.config.max_ep_possible_reward:
           max_ep_reward_count +=1
-          print(reward)
-          print(screen)
+
           # check if success cretira was met
           if(max_ep_reward_count==self.config.succ_max):
             self.write_summary(num_game)
@@ -400,6 +406,13 @@ class Agent(BaseModel):
         self.t_w_input[name] = tf.placeholder('float32', self.t_w[name].get_shape().as_list(), name=name)
         self.t_w_assign_op[name] = self.t_w[name].assign(self.t_w_input[name])
 
+    with tf.variable_scope('initalizer_to_prdecit'):
+      self.w_input = {}
+      self.w_assign_op = {}
+
+      for name in self.w.keys():
+        self.w_input[name] = tf.placeholder('float32', self.w[name].get_shape().as_list(), name=name)
+        self.w_assign_op[name] = self.w[name].assign(self.w_input[name])
     # optimizer
     with tf.variable_scope('optimizer'):
       self.target_q_t = tf.placeholder('float32', [self.batch_size, self.HEADSNUM], name='target_q_t')
@@ -436,7 +449,6 @@ class Agent(BaseModel):
 
       self.optim = tf.train.RMSPropOptimizer(
           self.learning_rate_op, momentum=0.95, epsilon=0.01).minimize(self.loss)
-
 
       self.comp_grads_and_vars = tf.train.RMSPropOptimizer(self.learning_rate_op, momentum=0.95, epsilon=0.01).compute_gradients(self.loss)
 
@@ -488,6 +500,16 @@ class Agent(BaseModel):
   def update_target_q_network(self):
     for name in self.w.keys():
       self.t_w_assign_op[name].eval({self.t_w_input[name]: self.w[name].eval()})
+
+  def initalize_manually(self):
+    for name in self.w.keys():
+      if str.endswith(name,'_b'):
+        initializer = tf.constant(0,shape=self.w[name].get_shape().as_list()).eval()
+      else:
+        initializer = tf.truncated_normal(shape=self.w[name].get_shape().as_list(),mean=0.0,stddev=0.02).eval()
+
+      self.w_assign_op[name].eval({self.w_input[name]: initializer })
+      self.t_w_assign_op[name].eval({self.t_w_input[name]: initializer })
 
   def save_weight_to_pkl(self):
     if not os.path.exists(self.weight_dir):

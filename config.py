@@ -34,7 +34,8 @@ class AgentConfig(object):
 
   # Bootstrap
   heads_num = 1
-  p = 1
+  p =1
+  screen_1_hot = True
 
   # ToyProblem
   ToyProblem = True
