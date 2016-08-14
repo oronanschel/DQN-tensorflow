@@ -31,6 +31,7 @@ class ReplayMemory:
     self.prestates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
     self.poststates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
 
+
   def add(self, screen, reward, action, terminal,mask):
     assert screen.shape == self.dims
     # NB! screen is post-state, after action and reward
@@ -55,12 +56,16 @@ class ReplayMemory:
       indexes = [(index - i) % self.count for i in reversed(range(self.history_length))]
       return self.screens[indexes, ...]
 
-  def sample(self):
+  def sample(self,batch_size = 32):
     # memory must include poststate, prestate and history
     assert self.count > self.history_length
     # sample random indexes
     indexes = []
-    while len(indexes) < self.batch_size:
+
+    self.prestates = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
+    self.poststates = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
+
+    while len(indexes) < batch_size:
       # find random index 
       while True:
         # sample one index (ignore states wraping over 
@@ -74,7 +79,9 @@ class ReplayMemory:
           continue
         # otherwise use this index
         break
-      
+
+
+
       # NB! having index first is fastest in C-order matrices
       self.prestates[len(indexes), ...] = self.getState(index - 1)
       self.poststates[len(indexes), ...] = self.getState(index)

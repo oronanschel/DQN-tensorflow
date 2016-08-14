@@ -18,13 +18,18 @@ class Agent(BaseModel):
     super(Agent, self).__init__(config)
     self.sess = sess
     self.weight_dir = 'weights'
+    self.valid_size = config.valid_size
 
     self.HEADSNUM = config.heads_num
     self.batch_size = config.batch_size
+    self.eval_steps = config.eval_steps
 
     self.env = environment
     self.history = History(self.config)
     self.memory = ReplayMemory(self.config, self.model_dir)
+
+    self.v_avg = 0
+    self.loss_avg = 0
 
     with tf.variable_scope('step'):
       self.step_op = tf.Variable(0, trainable=False, name='step')
@@ -34,6 +39,7 @@ class Agent(BaseModel):
     self.create_results_file()
     self.build_dqn()
 
+
   def create_results_file(self):
     tempdir = os.path.join(os.getcwd(), "models")
     self.create_dir(tempdir)
@@ -42,17 +48,17 @@ class Agent(BaseModel):
     self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     data_file = open(self.prog_file, 'wb')
-    data_file.write('avg_reward,avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
+    data_file.write('avg_loss,avg_q,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
                     'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
-                    ',succ_counts,lr,step,\n')
+                    ',lr,step,\n')
     data_file.close()
 
-  def update_results(self, avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
-                     l1_norm,succ_counts,lr,step):
+  def update_results(self, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
+                     l1_norm,lr,step):
       fd = open(self.prog_file,'a')
-      fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % (avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
+      fd.write('%f,%f,%f,%f,%f,%f,%f,' % ( avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
-      fd.write('%d,%f,%d\n' % (succ_counts,lr,step))
+      fd.write('%f,%d\n' % (lr,step))
       fd.close()
 
   def create_dir(self,p):
@@ -66,12 +72,11 @@ class Agent(BaseModel):
     start_step = 0
     # start_time = time.time()
 
-    num_game, self.update_count, ep_reward = 0, 0, 0.
-    total_reward, self.total_loss, self.total_q = 0., 0., 0.
-    max_avg_ep_reward = 0
-    ep_rewards, actions = [], []
-    max_ep_reward_count = 0
-    num_game = 0
+    # num_game, self.update_count, ep_reward = 0, 0, 0.
+    # total_reward, self.total_loss, self.total_q = 0., 0., 0.
+    # max_avg_ep_reward = 0
+    # ep_rewards, actions = [], []
+    # num_game = 0
 
     screen, reward, action, terminal = self.env.new_random_game()
 
@@ -79,139 +84,98 @@ class Agent(BaseModel):
       self.history.add(screen)
 
     self.current_head = 0
-    self.max_ep_reward_flag = False
 
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
-
-      # if self.step == self.learn_start:
-      #   num_game, self.update_count, ep_reward = 0, 0, 0.
-      #   total_reward, self.total_loss, self.total_q = 0., 0., 0.
-      #   ep_rewards, actions = [], []
 
       # 1. predict
       action = self.predict(self.history.get(),self.current_head)
       # 2. act
       screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe + learn
-      mask = np.random.binomial(1,0.51,size=[self.HEADSNUM])
+      mask = np.random.binomial(1,1,size=[self.HEADSNUM])
 
       self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
-        # check if episode reward = max possible reward
-        if ep_reward == self.config.max_ep_possible_reward:
-          max_ep_reward_count +=1
-          if (max_ep_reward_count % 5 == 0):
-            self.max_ep_reward_flag = True
-          # check if success cretira was met
-          if(max_ep_reward_count==self.config.succ_max):
-            print('')
-            print(num_game)
-            return
         screen, reward, action, terminal = self.env.new_random_game()
-        num_game += 1
-        if(num_game==3000):
-          print('')
-          print(num_game)
-          return
+        for _ in range(self.history_length):
+          self.history.add(screen)
 
-        ep_rewards.append(ep_reward)
-        ep_reward = 0.
         # replace playing head
         self.current_head = np.random.randint(self.HEADSNUM)
 
-      else:
-        ep_reward += reward
+      if self.step >= self.learn_start and self.step % self.eval_freq == 0 :
+        num_game, self.update_count, ep_reward = 0, 0, 0.
+        total_reward, self.total_loss, self.total_q = 0., 0., 0.
+        ep_rewards, actions = [], []
+        num_game = 0
 
-      # actions.append(action)
-      total_reward += reward
+        screen, reward, action, terminal = self.env.new_random_game()
+        for _ in range(self.history_length):
+          self.history.add(screen)
+        self. current_head = 0
 
-      if self.step >= self.learn_start:
-        if (self.step % self.test_step == self.test_step - 1) or (self.max_ep_reward_flag):
-          self.max_ep_reward_flag = False
-          avg_reward = total_reward / self.test_step
-          avg_loss = self.total_loss / self.update_count
-          avg_q = self.total_q / self.update_count
+        for estep in range(0,self.eval_steps):
+          # 1. predict
+          # TODO: predict policy under test
+          action = self.predict(self.history.get(), self.current_head)
+          # 2. act
+          screen, reward, terminal = self.env.act(action, is_training=False)
 
-          try:
-            max_ep_reward = np.max(ep_rewards)
-            min_ep_reward = np.min(ep_rewards)
-            avg_ep_reward = np.mean(ep_rewards)
-          except:
-            max_ep_reward, min_ep_reward, avg_ep_reward = 0, 0, 0
+          if terminal:
+            screen, reward, action, terminal = self.env.new_random_game()
+            for _ in range(self.history_length):
+              self.history.add(screen)
+            self.current_head = np.random.randint(self.HEADSNUM)
+
+            num_game += 1
+            ep_rewards.append(ep_reward)
+            ep_reward = 0.
+            # replace playing head
+          else:
+            ep_reward += reward
+
+
+        try:
+          max_ep_reward = np.max(ep_rewards)
+          min_ep_reward = np.min(ep_rewards)
+          avg_ep_reward = np.mean(ep_rewards)
+        except:
+          max_ep_reward, min_ep_reward, avg_ep_reward = 0, 0, 0
+
+        if self.step > 180:
+          # gradients, weights sample
+          g_w_l1_norm = self.gradient_weights_l1_norm()
+
+          lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
+
+          ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+          self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
+                              ep_rec,g_w_l1_norm,lr,self.step)
 
           print '\nmax_ep_r_cnt:%d  avg_r: %.4f, avg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
-              % (max_ep_reward_count,avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+                % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
 
-          if max_avg_ep_reward * 0.9 <= avg_ep_reward:
-            self.step_assign_op.eval({self.step_input: self.step + 1})
-            # self.save_model(self.step + 1)
-
-            max_avg_ep_reward = max(max_avg_ep_reward, avg_ep_reward)
-
-          if self.step > 180:
-            # gradients, weights sample
-            g_w_l1_norm = self.gradient_weights_l1_norm()
-
-            lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
-
-            ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
-            self.update_results(avg_reward, avg_loss, avg_q, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                                ep_rec,g_w_l1_norm,max_ep_reward_count,lr,self.step)
-
-            plot(self.mydir)
-            '''
-                        self.inject_summary({
-                'average.reward': avg_reward,
-                'average.loss': avg_loss,
-                'average.q': avg_q,
-                'episode.max reward': max_ep_reward,
-                'episode.min reward': min_ep_reward,
-                'episode.avg reward': avg_ep_reward,
-                'episode.num of game': num_game,
-                'episode.rewards': ep_rewards,
-                'episode.actions': actions,
-                'training.learning_rate': self.learning_rate_op.eval({self.learning_rate_step: self.step}),
-              }, self.step)
-            '''
-
-
-          # num_game = 0
-          # total_reward = 0.
-          # self.total_loss = 0.
-          # self.total_q = 0.
-          # self.update_count = 0
-          # ep_reward = 0.
-          # ep_rewards = []
+          plot(self.mydir)
 
   def gradient_weights_l1_norm(self):
     if self.memory.count < self.history_length:
       return
     else:
-      s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample()
+      s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample(self.valid_size)
 
-    if self.double_q:
-      # Double Q-learning
-      pred_action = self.q_action.eval({self.s_t: s_t_plus_1})
+    q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
 
-      q_t_plus_1_with_pred_action = self.target_q_with_idx.eval({
-        self.target_s_t: s_t_plus_1,
-        self.target_q_idx: [[idx, pred_a] for idx, pred_a in enumerate(pred_action)]
-      })
-      target_q_t = (1. - terminal) * self.discount * q_t_plus_1_with_pred_action + reward
-    else:
-      q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
-
-      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0, self.env.action_size)]]
+    q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0, self.env.action_size)]]
+    max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
+    target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+    target_q_t = target_q_t.reshape(self.valid_size, 1)
+    for k in range(1, self.HEADSNUM):
+      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.env.action_size * k, self.env.action_size * (k + 1))]]
       max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
-      target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-      target_q_t = target_q_t.reshape(self.batch_size, 1)
-      for k in range(1, self.HEADSNUM):
-        q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.env.action_size * k, self.env.action_size * (k + 1))]]
-        max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
-        target_q_t_slice = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-        target_q_t_slice = target_q_t_slice.reshape(self.batch_size, 1)
-        target_q_t = np.concatenate((target_q_t, target_q_t_slice), axis=1)
+      target_q_t_slice = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+      target_q_t_slice = target_q_t_slice.reshape(self.valid_size, 1)
+      target_q_t = np.concatenate((target_q_t, target_q_t_slice), axis=1)
 
       grads_weights_samp =  self.sess.run([x for x in self.grad_and_val_l1_norm], {
         self.target_q_t: target_q_t,
@@ -221,6 +185,16 @@ class Agent(BaseModel):
         self.mask: mask
       })
 
+      self.loss_avg = self.sess.run([self.loss], {
+        self.target_q_t: target_q_t,
+        self.action: action,
+        self.s_t: s_t,
+        self.learning_rate_step: self.step,
+        self.mask: mask
+      })
+
+      #TODO: compute v avrage
+      # self.v_avg = ....
 
 
 
@@ -258,54 +232,42 @@ class Agent(BaseModel):
     else:
       s_t, action, reward, s_t_plus_1, terminal, mask = self.memory.sample()
 
-    t = time.time()
-    if self.double_q:
-      # Double Q-learning
-      pred_action = self.q_action.eval({self.s_t: s_t_plus_1})
+    q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
 
-      q_t_plus_1_with_pred_action = self.target_q_with_idx.eval({
-        self.target_s_t: s_t_plus_1,
-        self.target_q_idx: [[idx, pred_a] for idx, pred_a in enumerate(pred_action)]
-      })
-      target_q_t = (1. - terminal) * self.discount * q_t_plus_1_with_pred_action + reward
-    else:
-      # q(s_1,a) - shape = [32,actions*HEADS]
-      q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
+    # t - shape [32]
+    terminal = np.array(terminal) + 0.
 
-      # t - shape [32]
-      terminal = np.array(terminal) + 0.
+    q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0,self.env.action_size)]]
+    max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
+    target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+    target_q_t = target_q_t.reshape(self.batch_size,1)
+    for k in range(1,self.HEADSNUM):
+      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.env.action_size*k, self.env.action_size*(k+1))]]
+      max_q_t_plus_1 =  np.max( q_t_plus_1_slice, axis=1)
+      target_q_t_slice =  (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+      target_q_t_slice = target_q_t_slice.reshape(self.batch_size,1)
+      target_q_t = np.concatenate(  (target_q_t,target_q_t_slice), axis=1)
+      # TODO: Think about mixing the targets
 
-      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0,self.env.action_size)]]
-      max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
-      target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-      target_q_t = target_q_t.reshape(self.batch_size,1)
-      for k in range(1,self.HEADSNUM):
-        q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.env.action_size*k, self.env.action_size*(k+1))]]
-        max_q_t_plus_1 =  np.max( q_t_plus_1_slice, axis=1)
-        target_q_t_slice =  (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-        target_q_t_slice = target_q_t_slice.reshape(self.batch_size,1)
-        target_q_t = np.concatenate(  (target_q_t,target_q_t_slice), axis=1)
-        # TODO: Think about mixing the targets
-
-      # max_q - shape = [32,5]
-
-      #max_q_t_plus_1 = np.max(q_t_plus_1, axis=1)
-
-
-
-
-
-      _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
-      self.target_q_t: target_q_t,
-      self.action: action,
-      self.s_t: s_t,
-      self.learning_rate_step: self.step,
-      self.mask : mask,
+    _, = self.sess.run([self.optim], {
+    self.target_q_t: target_q_t,
+    self.action: action,
+    self.s_t: s_t,
+    self.learning_rate_step: self.step,
+    self.mask : mask,
     })
+  #
+  #   _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
+  #   self.target_q_t: target_q_t,
+  #   self.action: action,
+  #   self.s_t: s_t,
+  #   self.learning_rate_step: self.step,
+  #   self.mask : mask,
+  # })
 
-    self.total_loss += loss
-    self.total_q += q_t.mean()
-    self.update_count += 1
+    # self.total_loss += loss
+    # self.total_q += q_t.mean()
+    # self.update_count += 1
 
   def build_dqn(self):
     self.w = {}

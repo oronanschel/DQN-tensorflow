@@ -29,21 +29,24 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  _test_step =  10000
-  _save_step = _test_step * 10
+  eval_freq =  250
+  _save_step = 10000
+  eval_steps = 1000
+
+  valid_size = 500
 
   # Bootstrap
-  heads_num = 50
+  heads_num = 5
 
   # ToyProblem
-  ToyProblem = True
+  ToyProblem = False
   max_ep_possible_reward = 10
   succ_max = 100
 
 class EnvironmentConfig(object):
   env_name = 'Breakout-v0'
 
-  ToyProblem = True
+  ToyProblem = False
   if ToyProblem:
     screen_width  = 25
     screen_height = 1
