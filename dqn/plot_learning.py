@@ -1,19 +1,23 @@
 import matplotlib.pyplot as plt
 import csv, pdb, sys
 from matplotlib.backends.backend_pdf import PdfPages
+from config import get_config
 import numpy as np
 
 
 
-def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
+def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads_num=1):
 
 
-  counts_tag = {'succ_counts'}
+  avg_v_tag = []
+  for i in range(0,heads_num):
+      avg_v_tag.append('avg_v['+str(i)+']')
+
   lr_tag = {'lr'}
-  reward_tags = {'avg_reward','avg_ep_reward', 'min_ep_reward','max_ep_reward'}
+  reward_tags = {'avg_ep_reward', 'min_ep_reward','max_ep_reward'}
   grad_norm_tags = {'l1_grad_l1_norm','l2_grad_l1_norm','l3_grad_l1_norm','l4_grad_l1_norm'}
   weight_norm_tags = {'l1_l1_norm','l2_l1_norm','l3_l1_norm','l4_l1_norm'}
-  tags_1 = {'avg_loss', 'avg_q','epsilon'}
+  tags_1 = {'avg_loss','epsilon'}
   tags_2 = {'num_game'}
 
   filename = "../models/2016-07-18_15-37-45" if filename is None else filename
@@ -21,9 +25,10 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
   save_loc = "%s/%s" % (filename, pdf_loc)
   with open(open_loc) as csvfile:
     reader = csv.DictReader(csvfile)
-    avg_reward = []
-    avg_loss = []
-    avg_q = []
+    avg_v = []
+    for i in range(0, heads_num):
+        avg_v.append([])
+
     avg_ep_reward = []
     max_ep_reward = []
     min_ep_reward = []
@@ -40,13 +45,14 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
     l3_l1_norm = []
     l4_l1_norm = []
 
-    succ_counts =[]
     lr =[]
     step = []
+    avg_loss = []
+
     for row in reader:
-        avg_reward.append(row['avg_reward'])
+        for i in range(0, heads_num):
+            avg_v[i].append(float(row['avg_v['+str(i)+']']))
         avg_loss.append(float(row['avg_loss']))
-        avg_q.append(row['avg_q'])
         avg_ep_reward.append(row['avg_ep_reward'])
         max_ep_reward.append(row['max_ep_reward'])
         min_ep_reward.append(row['min_ep_reward'])
@@ -63,19 +69,21 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv"):
         l3_l1_norm.append(row['l3_l1_norm'])
         l4_l1_norm.append(row['l4_l1_norm'])
 
-        succ_counts.append(row['succ_counts'])
         lr.append(row['lr'])
         step.append(row['step'])
   pp = PdfPages(save_loc)
-  # counts
-  for tag in counts_tag:
-      plt.figure()
-      plt.title(tag)
-      plt.plot(step,eval(tag), label=tag)
-      plt.xlabel('step')
-      plt.legend(loc='best')
-      plt.savefig(pp, format='pdf')
-      plt.close()
+
+
+  # print(avg_v)
+  plt.figure()
+  plt.title("avg v")
+  for i in range(0,heads_num):
+    plt.plot(step,avg_v[i], label='avg_v['+str(i)+']')
+  plt.xlabel('step')
+  plt.legend(loc='best')
+  plt.savefig(pp, format='pdf')
+  plt.close()
+
 
   # print(avg_reward)
   plt.figure()

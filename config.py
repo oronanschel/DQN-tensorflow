@@ -2,26 +2,26 @@ class AgentConfig(object):
   scale = 10000
   display = False
 
-  max_step = 200000
-  memory_size = 100000
+  max_step = 50000000
+  memory_size = 1000000
 
   batch_size = 32
   random_start = 30
   cnn_format = 'NCHW'
   discount = 0.99
-  target_q_update_step = scale/4
-  learning_rate = 0.00025
+  target_q_update_step = 6500
+  learning_rate = 0.0005
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
   learning_rate_decay_step = 10000
 
   ep_end = 0.001
   ep_start = 1.
-  ep_end_t = scale
+  ep_end_t = 100000
 
   history_length = 4
   train_frequency = 4
-  learn_start = 100
+  learn_start = 5000
 
   min_delta = -1
   max_delta = 1
@@ -29,14 +29,14 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  eval_freq =  250
+  eval_freq =  10000
   _save_step = 10000
-  eval_steps = 1000
+  eval_steps = 2000
 
   valid_size = 500
 
   # Bootstrap
-  heads_num = 5
+  heads_num = 1
 
   # ToyProblem
   ToyProblem = False
