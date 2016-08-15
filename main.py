@@ -6,6 +6,8 @@ from dqn.agent import Agent
 from dqn.environment import GymEnvironment
 from dqn.Myenvironment import MyGymEnvironment
 from config import get_config
+import time
+import datetime
 
 flags = tf.app.flags
 
@@ -52,6 +54,8 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
+    config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    #config.folder_name = '2016-08-15_10-31-28'
     if config.ToyProblem:
       env = MyGymEnvironment(config)
     else:

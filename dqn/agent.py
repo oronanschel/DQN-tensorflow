@@ -25,6 +25,7 @@ class Agent(BaseModel):
     self.HEADSNUM = config.heads_num
     self.batch_size = config.batch_size
     self.eval_steps = config.eval_steps
+    self.save_freq = config.save_freq
 
     self.env = environment
     self.history = History(self.config)
@@ -42,10 +43,14 @@ class Agent(BaseModel):
     self.build_dqn()
 
 
-  def create_results_file(self):
+  def create_results_file(self,_folder_name = None):
     tempdir = os.path.join(os.getcwd(), "models")
     self.create_dir(tempdir)
-    folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    if _folder_name:
+      folder_name = _folder_name
+    else:
+      folder_name = self.config.folder_name
+      # folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     self.mydir = os.path.join(tempdir, folder_name)
     self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
@@ -106,6 +111,10 @@ class Agent(BaseModel):
 
       self.observe(screen, reward, action, terminal,mask)
 
+
+      # if self.step % self.save_freq == 0:
+      #   self.save_model(self.step + 1)
+
       if terminal:
         screen, reward, action, terminal = self.env.new_random_game()
         for _ in range(self.history_length):
@@ -128,7 +137,7 @@ class Agent(BaseModel):
         for estep in range(0,self.eval_steps):
           # 1. predict
           # TODO: predict policy under test
-          action = self.predict(self.history.get(), self.current_head)
+          action = self.predict(self.history.get(), self.current_head,test_ep=0.01)
           # 2. act
           screen, reward, terminal = self.env.act(action+1, is_training=True)
 
@@ -283,18 +292,7 @@ class Agent(BaseModel):
     self.learning_rate_step: self.step,
     self.mask : mask,
     })
-  #
-  #   _, q_t, loss = self.sess.run([self.optim, self.q, self.loss], {
-  #   self.target_q_t: target_q_t,
-  #   self.action: action,
-  #   self.s_t: s_t,
-  #   self.learning_rate_step: self.step,
-  #   self.mask : mask,
-  # })
 
-    # self.total_loss += loss
-    # self.total_q += q_t.mean()
-    # self.update_count += 1
 
   def build_dqn(self):
     self.w = {}
@@ -452,6 +450,8 @@ class Agent(BaseModel):
       self.optim = tf.train.RMSPropOptimizer(
           self.learning_rate_op, momentum=0.95, epsilon=0.01).minimize(self.loss)
 
+
+      # Validation Statistics
       self.max_q_t_plus_1 = tf.placeholder('float32', [None, self.HEADSNUM], name='max_q_t_plus_1')
       avg_v_l = []
       q_acted_l_valid = []
@@ -525,7 +525,7 @@ class Agent(BaseModel):
 
     self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=30)
 
-    # self.load_model()
+   # self.load_model()
     self.update_target_q_network()
 
   def update_target_q_network(self):

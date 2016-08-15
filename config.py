@@ -9,19 +9,19 @@ class AgentConfig(object):
   random_start = 30
   cnn_format = 'NCHW'
   discount = 0.99
-  target_q_update_step = 6500
-  learning_rate = 0.0005
+  target_q_update_step = 10500
+  learning_rate = 0.00025
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
   learning_rate_decay_step = 10000
 
-  ep_end = 0.001
+  ep_end = 0.01
   ep_start = 1.
-  ep_end_t = 100000
+  ep_end_t = 1000000
 
   history_length = 4
   train_frequency = 4
-  learn_start = 5000
+  learn_start = 50000
 
   min_delta = -1
   max_delta = 1
@@ -29,9 +29,9 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  eval_freq =  10000
-  _save_step = 10000
-  eval_steps = 2000
+  eval_freq =  50000
+  save_freq = 10000
+  eval_steps = 10000
 
   valid_size = 500
 

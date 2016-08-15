@@ -32,17 +32,29 @@ class BaseModel(object):
     print(" [*] Saving checkpoints...")
     model_name = type(self).__name__
 
-    if not os.path.exists(self.checkpoint_dir):
-      os.makedirs(self.checkpoint_dir)
-    self.saver.save(self.sess, self.checkpoint_dir, global_step=step)
+
+    tempdir = os.path.join(os.getcwd(), "models")
+    folder_name = self.config.folder_name + '/session/sess'
+    mydir = os.path.join(tempdir, folder_name)
+    if not os.path.exists(mydir):
+      os.makedirs(mydir)
+    self.saver.save(self.sess, mydir, global_step=step)
+
+    # if not os.path.exists(self.checkpoint_dir):
+    #   os.makedirs(self.checkpoint_dir)
+    # self.saver.save(self.sess, self.checkpoint_dir, global_step=step)
 
   def load_model(self):
     print(" [*] Loading checkpoints...")
 
-    ckpt = tf.train.get_checkpoint_state(self.checkpoint_dir)
+    tempdir = os.path.join(os.getcwd(), "models")
+    folder_name = self.config.folder_name + '/session/sess'
+    mydir = os.path.join(tempdir, folder_name)
+
+    ckpt = tf.train.get_checkpoint_state(mydir)
     if ckpt and ckpt.model_checkpoint_path:
       ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-      fname = os.path.join(self.checkpoint_dir, ckpt_name)
+      fname = os.path.join(mydir, ckpt_name)
       self.saver.restore(self.sess, fname)
       print(" [*] Load SUCCESS: %s" % fname)
       return True
