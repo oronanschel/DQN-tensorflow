@@ -9,7 +9,7 @@ class AgentConfig(object):
   random_start = 30
   cnn_format = 'NCHW'
   discount = 0.99
-  target_q_update_step = 10500
+  target_q_update_step = 10000
   learning_rate = 0.00025
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
@@ -22,6 +22,7 @@ class AgentConfig(object):
   history_length = 4
   train_frequency = 4
   learn_start = 50000
+  # learn_start = 50
 
   min_delta = -1
   max_delta = 1

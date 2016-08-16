@@ -111,7 +111,6 @@ class Agent(BaseModel):
 
       self.observe(screen, reward, action, terminal,mask)
 
-
       # if self.step % self.save_freq == 0:
       #   self.save_model(self.step + 1)
 
@@ -139,7 +138,7 @@ class Agent(BaseModel):
           # TODO: predict policy under test
           action = self.predict(self.history.get(), self.current_head,test_ep=0.01)
           # 2. act
-          screen, reward, terminal = self.env.act(action+1, is_training=True)
+          screen, reward, terminal = self.env.act(action+1, is_training=False)
 
           if terminal:
             screen, reward, action, terminal = self.env.new_random_game()
