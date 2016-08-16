@@ -12,6 +12,7 @@ from .history import History
 from .ops import linear, conv2d
 from .replay_memory import ReplayMemory
 from utils import get_time, save_pkl, load_pkl
+from matplotlib import pyplot as plt
 
 class Agent(BaseModel):
   def __init__(self, config, environment, sess):
@@ -85,65 +86,64 @@ class Agent(BaseModel):
 
   def train(self):
     start_step = 0
-    # start_time = time.time()
-
-    # num_game, self.update_count, ep_reward = 0, 0, 0.
-    # total_reward, self.total_loss, self.total_q = 0., 0., 0.
-    # max_avg_ep_reward = 0
-    # ep_rewards, actions = [], []
-    # num_game = 0
 
     screen, reward, action, terminal = self.env.new_random_game()
-
     for _ in range(self.history_length):
       self.history.add(screen)
 
     self.current_head = 0
-
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
-
       # 1. predict
       action = self.predict(self.history.get(),self.current_head)
       # 2. act
-      screen, reward, terminal = self.env.act(action+1, is_training=True)
+      if (action == 1):
+        action = 3 # LEFT
+      elif (action == 2):
+        action = 4 # RIGHT
+
+      screen, reward, terminal = self.env.act(action, is_training=True)
       # 3. observe + learn
       mask = np.random.binomial(1,1,size=[self.HEADSNUM])
-
       self.observe(screen, reward, action, terminal,mask)
 
       # if self.step % self.save_freq == 0:
       #   self.save_model(self.step + 1)
 
-      if terminal:
+      # hist = self.history.get()
+      # plt.figure()
+      # for i in range(0,self.config.history_length):
+      #   plt.subplot(self.config.history_length,1,i+1)
+      #   plt.imshow(s_t[0][i],cmap='Greys_r')
+      # plt.show()
+
+      if terminal==True:
         screen, reward, action, terminal = self.env.new_random_game()
-        for _ in range(self.history_length):
-          self.history.add(screen)
 
         # replace playing head
         self.current_head = np.random.randint(self.HEADSNUM)
 
-      if self.step >= self.learn_start and self.step % self.eval_freq == 0 :
-        num_game, self.update_count, ep_reward = 0, 0, 0.
-        total_reward, self.total_loss, self.total_q = 0., 0., 0.
+      if self.step >= self.learn_start and self.step % self.eval_freq == 0:
+        num_game, ep_reward = 0, 0.
         ep_rewards, actions = [], []
         num_game = 0
 
-        screen, reward, action, terminal = self.env.new_random_game()
+        screen, reward, action, terminal = self.env.new_game()
         for _ in range(self.history_length):
           self.history.add(screen)
         self. current_head = 0
 
         for estep in range(0,self.eval_steps):
           # 1. predict
-          # TODO: predict policy under test
           action = self.predict(self.history.get(), self.current_head,test_ep=0.01)
           # 2. act
-          screen, reward, terminal = self.env.act(action+1, is_training=False)
+          if (action == 1):
+            action = 3  # LEFT
+          elif (action == 2):
+            action = 4  # RIGHT
+          screen, reward, terminal = self.env.act(action, is_training=False)
 
-          if terminal:
+          if terminal==True:
             screen, reward, action, terminal = self.env.new_random_game()
-            for _ in range(self.history_length):
-              self.history.add(screen)
             self.current_head = np.random.randint(self.HEADSNUM)
 
             num_game += 1
@@ -243,8 +243,6 @@ class Agent(BaseModel):
       action = random.randrange(self.action_size)
     else:
       action = self.q_action.eval({self.s_t: [s_t],self.head: current_head})[0]
-
-      #action = self.q_action.eval({self.s_t: [s_t]})[0]
 
     return action
 

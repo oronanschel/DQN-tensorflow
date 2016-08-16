@@ -18,17 +18,18 @@ flags.DEFINE_boolean('double_q', False, 'Whether to use double q-learning')
 
 # Environment
 flags.DEFINE_string('env_name', 'Breakout-v0', 'The name of gym environment to use')
+# flags.DEFINE_string('env_name', 'MontezumaRevenge-v0', 'The name of gym environment to use')
 flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
-flags.DEFINE_string('gpu_fraction', '1/3', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
-flags.DEFINE_boolean('display', True, 'Whether to do display the game screen or not')
+flags.DEFINE_string('gpu_fraction', '1/4', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
+flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
 # import numpy as np
 # rand = np.random.randint(10,200)
 # print('rand seed:'+str(rand))
-flags.DEFINE_integer('random_seed', 123, 'Value of random seed')
+flags.DEFINE_integer('random_seed', 120, 'Value of random seed')
 
 FLAGS = flags.FLAGS
 
