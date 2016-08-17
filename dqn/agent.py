@@ -21,6 +21,7 @@ class Agent(BaseModel):
     self.weight_dir = 'weights'
     self.valid_size = config.valid_size
     self.action_size = 3
+    self.p = self.config.p
 
 
     self.HEADSNUM = config.heads_num
@@ -104,7 +105,8 @@ class Agent(BaseModel):
 
       screen, reward, terminal = self.env.act(env_action, is_training=True)
       # 3. observe + learn
-      self.observe(screen, reward, action, terminal)
+      mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
+      self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
         screen, reward, action, terminal = self.env.new_random_game()
