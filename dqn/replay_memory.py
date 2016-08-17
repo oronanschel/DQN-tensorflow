@@ -96,7 +96,7 @@ class ReplayMemory:
       return np.transpose(self.prestates, (0, 2, 3, 1)), actions, \
         rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals
     else:
-      return self.prestates, actions, rewards, self.poststates, terminals
+      return self.prestates, actions, rewards, self.poststates, terminals, masks
 
   def save(self):
     for idx, (name, array) in enumerate(

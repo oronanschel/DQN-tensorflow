@@ -32,14 +32,15 @@ class AgentConfig(object):
   dueling = False
 
   eval_freq =  5*(10**4)
-  # eval_freq = 10 * (10 ** 3)
+  # eval_freq = 5 * (10 ** 2)
   save_freq = 10000
   eval_steps = 10**4
   # eval_steps = 1000
   valid_size = 500
 
   # Bootstrap
-  heads_num = 1
+  heads_num = 10
+  p  = 1
 
   # ToyProblem
   ToyProblem = False
