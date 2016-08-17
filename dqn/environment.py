@@ -27,7 +27,8 @@ class Environment(object):
   def new_random_game(self):
     self.new_game(True)
     for _ in xrange(random.randint(0, self.random_start - 1)):
-      self._step(0)
+      # self._step(0)
+      self._step(random.randint(self.action_size))
     self.render()
     return self.screen, 0, 0, self.terminal
 

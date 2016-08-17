@@ -32,7 +32,7 @@ class ReplayMemory:
     self.poststates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
 
 
-  def add(self, screen, reward, action, terminal,mask):
+  def add(self, screen, reward, action, terminal,mask=0):
     assert screen.shape == self.dims
     # NB! screen is post-state, after action and reward
     self.actions[self.current] = action
@@ -94,9 +94,9 @@ class ReplayMemory:
 
     if self.cnn_format == 'NHWC':
       return np.transpose(self.prestates, (0, 2, 3, 1)), actions, \
-        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals , masks
+        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals
     else:
-      return self.prestates, actions, rewards, self.poststates, terminals , masks
+      return self.prestates, actions, rewards, self.poststates, terminals
 
   def save(self):
     for idx, (name, array) in enumerate(

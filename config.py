@@ -1,7 +1,7 @@
 class AgentConfig(object):
   display = False
 
-  max_step = 5*(10**6)
+  max_step = 50*(10**6)
   memory_size = 10**6
 
   batch_size = 32
@@ -9,12 +9,12 @@ class AgentConfig(object):
   cnn_format = 'NCHW'
   discount = 0.99
   target_q_update_step = 10**4
-  learning_rate = 0.00025
+  learning_rate = 0.0006
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
   learning_rate_decay_step = 50000
 
-  ep_end = 0.1
+  ep_end = 0.05
   ep_start = 1.
   ep_end_t = 10**6
   # ep_end_t = 10 ** 5
@@ -22,7 +22,7 @@ class AgentConfig(object):
   history_length = 4
   train_frequency = 4
   learn_start = 5*(10**4)
-  # learn_start = 5 * (100 )
+  # learn_start = 5 * (1000)
 
 
   min_delta = -1
@@ -32,14 +32,14 @@ class AgentConfig(object):
   dueling = False
 
   eval_freq =  5*(10**4)
-  # eval_freq = 1 * (10 ** 3)
+  # eval_freq = 10 * (10 ** 3)
   save_freq = 10000
   eval_steps = 10**4
-  # eval_steps = 100
+  # eval_steps = 1000
   valid_size = 500
 
   # Bootstrap
-  heads_num = 5
+  heads_num = 1
 
   # ToyProblem
   ToyProblem = False
