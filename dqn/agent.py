@@ -54,17 +54,18 @@ class Agent(BaseModel):
       folder_name = self.config.folder_name
       # folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     self.mydir = os.path.join(tempdir, folder_name)
-    self.create_dir(self.mydir)
     self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
-    data_file = open(self.prog_file, 'wb')
-    data_file.write('avg_loss,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
-                    'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
-                    ',lr,step,')
-    for i in range(0,self.HEADSNUM):
-      data_file.write('avg_v['+str(i)+'],')
-    data_file.write('heads_num,')
-    data_file.write('\n')
-    data_file.close()
+    folder_existed = self.create_dir(self.mydir)
+    if folder_existed == False:
+      data_file = open(self.prog_file, 'wb')
+      data_file.write('avg_loss,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
+                      'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
+                      ',lr,step,')
+      for i in range(0,self.HEADSNUM):
+        data_file.write('avg_v['+str(i)+'],')
+      data_file.write('heads_num,')
+      data_file.write('\n')
+      data_file.close()
 
   def update_results(self, avg_loss, avg_v, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
                      l1_norm,lr,step):
@@ -81,12 +82,15 @@ class Agent(BaseModel):
   def create_dir(self,p):
     try:
       os.makedirs(p)
+      return False
     except OSError, e:
       if e.errno != 17:
         raise  # This was not a "directory exist" error..
+      else:
+        return True
 
   def train(self):
-    start_step = 0
+    start_step = self.step_op.eval()
 
     screen, reward, action, terminal = self.env.new_random_game()
     for _ in range(self.history_length):
@@ -112,10 +116,11 @@ class Agent(BaseModel):
         screen, reward, action, terminal = self.env.new_random_game()
         self.current_head = np.random.randint(self.HEADSNUM)
 
-      if self.step % self.save_freq == 0:
+      if self.step >= self.learn_start and self.step % self.eval_freq == 0:
+        # save the model
+        self.step_assign_op.eval({self.step_input: self.step + 1})
         self.save_model(self.step+1)
 
-      if self.step >= self.learn_start and self.step % self.eval_freq == 0:
         num_game, ep_reward = 0, 0.
         ep_rewards, actions = [], []
         num_game = 0
@@ -157,20 +162,19 @@ class Agent(BaseModel):
         except:
           max_ep_reward, min_ep_reward, avg_ep_reward = 0, 0, 0
 
-        if self.step > 180:
-          # gradients, weights sample
-          g_w_l1_norm = self.gradient_weights_l1_norm()
+        # gradients, weights sample
+        g_w_l1_norm = self.gradient_weights_l1_norm()
 
-          lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
+        lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
-          ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
-          self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                              ep_rec,g_w_l1_norm,lr,self.step)
+        ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+        self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
+                            ep_rec,g_w_l1_norm,lr,self.step)
 
-          print '\navg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
-                % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+        print '\navg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
+              % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
 
-          plot(self.mydir,heads_num = self.HEADSNUM)
+        plot(self.mydir,heads_num = self.HEADSNUM)
 
   def gradient_weights_l1_norm(self):
     if self.memory.count < self.history_length:

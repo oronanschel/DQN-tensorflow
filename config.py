@@ -23,8 +23,8 @@ class AgentConfig(object):
   history_length = 4
   train_frequency = 4
 
-  learn_start = 5*(10**4)
-  # learn_start = 100
+  # learn_start = 5*(10**4)
+  learn_start = 100
 
 
   min_delta = -1
@@ -33,14 +33,14 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  eval_freq =  5*(10**4)
-  # eval_freq = 1000
+  # eval_freq =  5*(10**4)
+  eval_freq = 300
 
   # save_freq = 10000
-  save_freq = 1200
+  save_freq = 500
 
-  eval_steps = 10**4
-  # eval_steps = 1000
+  # eval_steps = 10**4
+  eval_steps = 100
 
   valid_size = 500
 
