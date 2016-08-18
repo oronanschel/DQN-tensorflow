@@ -112,6 +112,9 @@ class Agent(BaseModel):
         screen, reward, action, terminal = self.env.new_random_game()
         self.current_head = np.random.randint(self.HEADSNUM)
 
+      if self.step % self.save_freq == 0:
+        self.save_model(self.step+1)
+
       if self.step >= self.learn_start and self.step % self.eval_freq == 0:
         num_game, ep_reward = 0, 0.
         ep_rewards, actions = [], []
@@ -277,13 +280,14 @@ class Agent(BaseModel):
       target_q_t = np.concatenate(  (target_q_t,target_q_t_slice), axis=1)
       # TODO: Think about mixing the targets
 
-    _, = self.sess.run([self.optim], {
+    _ = self.sess.run([self.optim], {
     self.target_q_t: target_q_t,
     self.action: action,
     self.s_t: s_t,
     self.learning_rate_step: self.step,
     self.mask : mask,
     })
+
 
 
   def build_dqn(self):
@@ -422,6 +426,8 @@ class Agent(BaseModel):
 
       self.delta = self.target_q_t - q_acted
 
+      #self.delta = tf.scalar_mul(1/self.HEADSNUM,self._delta)
+
       self.mask = tf.placeholder('float32',shape=[None,self.HEADSNUM],name='mask')
       self.delta_up = tf.mul(self.delta, self.mask)
 
@@ -516,7 +522,7 @@ class Agent(BaseModel):
 
     self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=30)
 
-    #self.load_model()
+    self.load_model()
     self.update_target_q_network()
 
   def update_target_q_network(self):

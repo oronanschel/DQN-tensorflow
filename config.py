@@ -16,13 +16,15 @@ class AgentConfig(object):
 
   ep_end = 0.05
   ep_start = 1.
-  ep_end_t = 10**6
-  # ep_end_t = 10 ** 5
+
+  # ep_end_t = 10**6
+  ep_end_t = 10 ** 5
 
   history_length = 4
   train_frequency = 4
+
   learn_start = 5*(10**4)
-  # learn_start = 5 * (1000)
+  # learn_start = 100
 
 
   min_delta = -1
@@ -32,15 +34,19 @@ class AgentConfig(object):
   dueling = False
 
   eval_freq =  5*(10**4)
-  # eval_freq = 5 * (10 ** 2)
-  save_freq = 10000
+  # eval_freq = 1000
+
+  # save_freq = 10000
+  save_freq = 1200
+
   eval_steps = 10**4
   # eval_steps = 1000
+
   valid_size = 500
 
   # Bootstrap
   heads_num = 10
-  p  = 1
+  p  = 0.5
 
   # ToyProblem
   ToyProblem = False

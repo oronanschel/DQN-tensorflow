@@ -32,7 +32,6 @@ class BaseModel(object):
     print(" [*] Saving checkpoints...")
     model_name = type(self).__name__
 
-
     tempdir = os.path.join(os.getcwd(), "models")
     folder_name = self.config.folder_name + '/session/sess'
     mydir = os.path.join(tempdir, folder_name)
@@ -48,7 +47,7 @@ class BaseModel(object):
     print(" [*] Loading checkpoints...")
 
     tempdir = os.path.join(os.getcwd(), "models")
-    folder_name = self.config.folder_name + '/session/sess'
+    folder_name = self.config.folder_name + '/session'
     mydir = os.path.join(tempdir, folder_name)
 
     ckpt = tf.train.get_checkpoint_state(mydir)

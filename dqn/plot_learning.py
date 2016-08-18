@@ -6,7 +6,7 @@ import numpy as np
 
 
 
-def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads_num=1):
+def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads_num=10):
 
 
   avg_v_tag = []
@@ -19,7 +19,9 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   weight_norm_tags = {'l1_l1_norm','l2_l1_norm','l3_l1_norm','l4_l1_norm'}
   tags_1 = {'avg_loss','epsilon','num_game'}
 
-  filename = "../models/2016-07-18_15-37-45" if filename is None else filename
+  filename = "../models/2016-08-17_15-26-59" if filename is None else filename
+
+
   open_loc = "%s/%s" % (filename, csv_loc)
   save_loc = "%s/%s" % (filename, pdf_loc)
   with open(open_loc) as csvfile:
@@ -74,13 +76,16 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
 
   pp = PdfPages(save_loc)
 
-
+  step = np.array([float(i) for i in step])
+  step = step/10**6
   # print(avg_v)
   plt.figure()
-  plt.title("avg v")
   for i in range(0,heads_num):
-    plt.plot(step,avg_v[i], label='avg_v['+str(i)+']')
-  plt.xlabel('step')
+      plt.plot(step,avg_v[i], label='avg_v['+str(i)+']')
+
+  plt.title("avg v")
+  plt.grid(True)
+  plt.xlabel('frames [millions]')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -91,8 +96,8 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   plt.title("Reward Stats")
   for tag in reward_tags:
     plt.plot(step,eval(tag), label=tag)
-
-  plt.xlabel('step')
+  plt.grid(True)
+  plt.xlabel('frames [millions]')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -103,7 +108,7 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
       plt.figure()
       plt.title(tag)
       plt.plot(step,eval(tag), label=tag)
-      plt.xlabel('step')
+      plt.xlabel('frames [millions]')
       plt.legend(loc='best')
       plt.savefig(pp, format='pdf')
       plt.close()
@@ -116,7 +121,7 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   for tag in grad_norm_tags:
     plt.plot(step,eval(tag), label=tag)
 
-  plt.xlabel('step')
+  plt.xlabel('frames [millions]')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -128,7 +133,7 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   for tag in weight_norm_tags:
     plt.plot(step,eval(tag), label=tag)
 
-  plt.xlabel('step')
+  plt.xlabel('frames [millions]')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
@@ -138,7 +143,7 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
       plt.figure()
       plt.title(tag)
       plt.plot(step,eval(tag), label=tag)
-      plt.xlabel('step')
+      plt.xlabel('frames [millions]')
       plt.legend(loc='best')
       plt.savefig(pp, format='pdf')
       plt.close()

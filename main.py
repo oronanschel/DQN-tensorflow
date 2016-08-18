@@ -56,7 +56,7 @@ def main(_):
     config = get_config(FLAGS) or FLAGS
 
     config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    #config.folder_name = '2016-08-15_10-31-28'
+    config.folder_name = 'save_load_test'
     if config.ToyProblem:
       env = MyGymEnvironment(config)
     else:
