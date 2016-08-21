@@ -17,8 +17,8 @@ class AgentConfig(object):
   ep_end = 0.05
   ep_start = 1.
 
-  # ep_end_t = 10**6
-  ep_end_t = 10 ** 5
+  ep_end_t = 10**6
+  # ep_end_t = 10 ** 5
 
   history_length = 4
   train_frequency = 4
@@ -36,8 +36,8 @@ class AgentConfig(object):
   # eval_freq =  5*(10**4)
   eval_freq = 300
 
-  # save_freq = 10000
-  save_freq = 500
+  save_freq = 10000
+  # save_freq = 500
 
   # eval_steps = 10**4
   eval_steps = 100
@@ -46,7 +46,11 @@ class AgentConfig(object):
 
   # Bootstrap
   heads_num = 10
-  p  = 0.5
+  p  = 1
+  test_policy = 'Ensemble'
+  test_policy = 'MaxQHead'
+  test_policy = 'MajorityVote'
+  # test_policy = 'Standard'
 
   # ToyProblem
   ToyProblem = False

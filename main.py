@@ -23,9 +23,9 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
-flags.DEFINE_string('gpu_fraction', '1/3', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
+flags.DEFINE_string('gpu_fraction', '1/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
-flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
+flags.DEFINE_boolean('is_train', False, 'Whether to do training or testing')
 # import numpy as np
 # rand = np.random.randint(10,200)
 # print('rand seed:'+str(rand))
@@ -55,8 +55,9 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
-    config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    config.folder_name = 'save_load_test'
+    # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    config.folder_name = '2016-08-18_17-26-01'
+
     if config.ToyProblem:
       env = MyGymEnvironment(config)
     else:
@@ -70,7 +71,7 @@ def main(_):
     if FLAGS.is_train:
       agent.train()
     else:
-      agent.play()
+      agent.playMy()
 
 if __name__ == '__main__':
   tf.app.run()

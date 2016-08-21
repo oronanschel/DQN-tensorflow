@@ -99,7 +99,7 @@ class Agent(BaseModel):
     self.current_head = 0
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
       # 1. predict
-      action = self.predict(self.history.get(),self.current_head)
+      action = self.predict(self.history.get(),self.current_head,is_training=True)
       # 2. act
       env_action = 0
       if (action == 1):
@@ -133,7 +133,7 @@ class Agent(BaseModel):
         for estep in range(0,self.eval_steps):
           # 1. predict
           # TODO: predict policy under test
-          action = self.predict(self.history.get(), self.current_head,test_ep=0.01)
+          action = self.predict(self.history.get(), self.current_head,test_ep=0.01,is_training=False)
           # 2. act
           env_action = 0
           if (action == 1):
@@ -235,14 +235,15 @@ class Agent(BaseModel):
 
     return grads_weights_samp
 
-  def predict(self, s_t, current_head, test_ep=None):
+  def predict(self, s_t, current_head, test_ep=None,is_training=True):
+
     ep = test_ep or (self.ep_end +
         max(0., (self.ep_start - self.ep_end)
           * (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
     if random.random() < ep:
       action = random.randrange(self.action_size)
     else:
-      action = self.q_action.eval({self.s_t: [s_t],self.head: current_head})[0]
+      action = self.q_action.eval({self.s_t: [s_t], self.head: current_head,self.is_training:is_training})[0]
 
       #action = self.q_action.eval({self.s_t: [s_t]})[0]
 
@@ -291,8 +292,6 @@ class Agent(BaseModel):
     self.learning_rate_step: self.step,
     self.mask : mask,
     })
-
-
 
   def build_dqn(self):
     self.w = {}
@@ -349,10 +348,52 @@ class Agent(BaseModel):
         self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512, activation_fn=activation_fn, name='l4')
         self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.action_size*self.HEADSNUM, name='q')
 
+      # action selection policy
       self.head = tf.placeholder('int32', name='head')
-      #self.q_action = tf.argmax(self.q, dimension=1)
-      tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
-      self.q_action = tf.argmax(tmp_q_slice, dimension=1)
+      self.is_training = tf.placeholder(tf.bool, name = 'is_training')
+      if self.config.test_policy == 'Ensemble':
+        # test action
+        q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in range(0,self.HEADSNUM)]
+        self.tmp_q_sum = tf.accumulate_n(q_heads_l_policy)
+
+        self.q_action_test = tf.argmax(self.tmp_q_sum, dimension=1)
+        # train action
+        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+        # action node
+        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+
+      elif self.config.test_policy == 'MajorityVote':
+        # test action
+        q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in
+                            range(0, self.HEADSNUM)]
+
+        q_head_votes = [tf.argmax(q_h_tmp, dimension=1) for q_h_tmp in q_heads_l_policy]
+
+        self.y, _, self.count = tf.unique_with_counts(tf.concat(0,q_head_votes))
+
+        self.max_ind = tf.argmax(self.count,dimension=0)
+        #TODO: Do one hot vector to extract q_action_test
+
+        self.q_action_test = [0]
+        # train action
+        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+        # action node
+        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+
+      elif self.config.test_policy == 'MaxQHead':
+        # test action
+        self.q_action_test = tf.argmax(self.q, dimension=1) % self.action_size
+        # train action
+        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+        # action node
+        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+
+      else:
+        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+        self.q_action = tf.argmax(tmp_q_slice, dimension=1)
 
 
     # target network
@@ -561,6 +602,50 @@ class Agent(BaseModel):
     for summary_str in summary_str_lists:
       self.writer.add_summary(summary_str, self.step)
 
+  def playMy(self, n_step=100000, _test_ep=0.01, render=False):
+
+    screen, reward, action, terminal = self.env.new_random_game()
+    ep_rewards = []
+    ep_reward = 0
+
+    for _ in range(self.history_length):
+      self.history.add(screen)
+    self.current_head = 0
+
+    for estep in tqdm(range(n_step), ncols=70):
+      # 1. predict
+      action = self.predict(self.history.get(), self.current_head, test_ep=_test_ep, is_training=False)
+      # 2. act
+      env_action = 0
+      if (action == 1):
+        env_action = 3  # LEFT
+      elif (action == 2):
+        env_action = 4  # RIGHT
+
+      screen, reward, terminal = self.env.act(env_action, is_training=False)
+      self.history.add(screen)
+
+      ep_reward += reward
+
+      if terminal == True:
+        screen, reward, action, terminal = self.env.new_random_game()
+        ep_rewards.append(ep_reward)
+        ep_reward = 0
+
+
+      if estep % 1000 == 0 and len(ep_rewards) > 0:
+        max_ep_reward = np.max(ep_rewards)
+        min_ep_reward = np.min(ep_rewards)
+        avg_ep_reward = np.mean(ep_rewards)
+
+        print ('\nframes:' + str(estep)
+               +'\nmax episode reward:'+str(max_ep_reward)
+               +'\navg episode reward:' + str(avg_ep_reward)
+               + '\nmin episode reward:' + str(min_ep_reward)
+               )
+
+
+
   def play(self, n_step=10000, n_episode=100, test_ep=None, render=False):
     if test_ep == None:
       test_ep = self.ep_end
@@ -581,7 +666,7 @@ class Agent(BaseModel):
 
       for t in tqdm(range(n_step), ncols=70):
         # 1. predict
-        action = self.predict(test_history.get(), test_ep)
+        action = self.predict(test_history.get(), test_ep,is_training=False)
         # 2. act
         screen, reward, terminal = self.env.act(action+1, is_training=False)
         # 3. observe
