@@ -13,6 +13,7 @@ from .ops import linear, conv2d
 from .replay_memory import ReplayMemory
 from utils import get_time, save_pkl, load_pkl
 from matplotlib import pyplot as plt
+import scipy ,cv2
 
 class Agent(BaseModel):
   def __init__(self, config, environment, sess):
@@ -20,16 +21,29 @@ class Agent(BaseModel):
     self.sess = sess
     self.weight_dir = 'weights'
     self.valid_size = config.valid_size
-    self.action_size = 3
+
+    # env
+    self.lives = environment.lives()
+    self.env = environment
+    self.death_ends_episode = config.death_ends_episode
+    self.noop_action = 0
+    self.frame_skip = config.frame_skip
+    self.action_size = len(self.env.getMinimalActionSet())
+    self.screen_dims = self.env.getScreenDims()
+    self.random_start = config.random_start
+    self.legal_actions = self.env.getMinimalActionSet()
+
+    # bootstrap
     self.p = self.config.p
-
-
     self.HEADSNUM = config.heads_num
+
+
+
     self.batch_size = config.batch_size
     self.eval_steps = config.eval_steps
     self.save_freq = config.save_freq
 
-    self.env = environment
+
     self.history = History(self.config)
     self.memory = ReplayMemory(self.config, self.model_dir)
 
@@ -78,7 +92,6 @@ class Agent(BaseModel):
       fd.write('%d,' % (self.HEADSNUM))
       fd.write('\n')
       fd.close()
-
   def create_dir(self,p):
     try:
       os.makedirs(p)
@@ -89,31 +102,46 @@ class Agent(BaseModel):
       else:
         return True
 
+  def get_observation(self):
+    screen = self.env.getScreenGrayscale().reshape(self.screen_dims[1], self.screen_dims[0])
+    resized = cv2.resize(screen, (self.screen_width, self.screen_height), interpolation=cv2.INTER_LINEAR)
+    return resized
+
+  def new_random_game(self):
+    num_actions = np.random.randint(4, self.random_start)
+    for i in range(num_actions):
+      self.env.act(self.noop_action)
+      self.history.add(self.get_observation())
+
+  def act(self,action):
+    reward = 0
+    for i in range(self.frame_skip):
+      reward += self.env.act(self.legal_actions[action])
+
+    screen = self.get_observation()
+    terminal = self.env.game_over()
+    return screen, reward, terminal
+
   def train(self):
     start_step = self.step_op.eval()
 
-    screen, reward, action, terminal = self.env.new_random_game()
-    for _ in range(self.history_length):
-      self.history.add(screen)
+    self.lives = self.env.lives()
+    self.env.reset_game()
+    self.new_random_game()
 
     self.current_head = 0
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
       # 1. predict
       action = self.predict(self.history.get(),self.current_head,is_training=True)
       # 2. act
-      env_action = 0
-      if (action == 1):
-        env_action = 3 # LEFT
-      elif (action == 2):
-        env_action = 4 # RIGHT
-
-      screen, reward, terminal = self.env.act(env_action, is_training=True)
+      screen, reward, terminal = self.act(action)
       # 3. observe + learn
       mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
       self.observe(screen, reward, action, terminal,mask)
 
       if terminal:
-        screen, reward, action, terminal = self.env.new_random_game()
+        self.env.reset_game()
+        self.new_random_game()
         self.current_head = np.random.randint(self.HEADSNUM)
 
       if self.step >= self.learn_start and self.step % self.eval_freq == 0:
@@ -125,27 +153,18 @@ class Agent(BaseModel):
         ep_rewards, actions = [], []
         num_game = 0
 
-        screen, reward, action, terminal = self.env.new_random_game()
-        for _ in range(self.history_length):
-          self.history.add(screen)
-        self. current_head = 0
-
+        self.env.reset_game()
+        self.new_random_game()
         for estep in range(0,self.eval_steps):
           # 1. predict
-          # TODO: predict policy under test
           action = self.predict(self.history.get(), self.current_head,test_ep=0.01,is_training=False)
           # 2. act
-          env_action = 0
-          if (action == 1):
-            env_action = 3  # LEFT
-          elif (action == 2):
-            env_action = 4  # RIGHT
-
-          screen, reward, terminal = self.env.act(env_action, is_training=False)
+          screen, reward, terminal = self.act(action)
           self.history.add(screen)
 
           if terminal==True:
-            screen, reward, action, terminal = self.env.new_random_game()
+            self.env.reset_game()
+            self.new_random_game()
 
             num_game += 1
             ep_rewards.append(ep_reward)
@@ -252,6 +271,13 @@ class Agent(BaseModel):
   def observe(self, screen, reward, action, terminal,mask):
     reward = max(self.min_reward, min(self.max_reward, reward))
 
+    new_lives = self.env.lives()
+    if(self.death_ends_episode and new_lives < self.lives):
+      terminal = True
+
+    self.lives = new_lives
+
+
     self.history.add(screen)
     self.memory.add(screen, reward, action, terminal,mask)
 
@@ -263,7 +289,7 @@ class Agent(BaseModel):
         self.update_target_q_network()
 
   def q_learning_mini_batch(self):
-    if self.memory.count < self.history_length:
+    if self.memory.count <= self.history_length:
       return
     else:
       s_t, action, reward, s_t_plus_1, terminal, mask = self.memory.sample()

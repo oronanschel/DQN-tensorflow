@@ -4,6 +4,9 @@ class AgentConfig(object):
   max_step = 50*(10**6)
   memory_size = 10**6
 
+  frame_skip = 4
+  death_ends_episode = True
+
   batch_size = 32
   random_start = 30
   cnn_format = 'NCHW'
@@ -23,8 +26,8 @@ class AgentConfig(object):
   history_length = 4
   train_frequency = 4
 
-  # learn_start = 5*(10**4)
-  learn_start = 100
+  learn_start = 5*(10**4)
+  # learn_start = 100
 
 
   min_delta = -1
@@ -33,14 +36,14 @@ class AgentConfig(object):
   double_q = False
   dueling = False
 
-  # eval_freq =  5*(10**4)
-  eval_freq = 300
+  eval_freq =  5*(10**4)
+  # eval_freq = 300
 
   save_freq = 10000
   # save_freq = 500
 
-  # eval_steps = 10**4
-  eval_steps = 100
+  eval_steps = 10**4
+  # eval_steps = 100
 
   valid_size = 500
 
@@ -48,8 +51,8 @@ class AgentConfig(object):
   heads_num = 10
   p  = 1
   test_policy = 'Ensemble'
-  test_policy = 'MaxQHead'
-  test_policy = 'MajorityVote'
+  # test_policy = 'MaxQHead'
+  # test_policy = 'MajorityVote'
   # test_policy = 'Standard'
 
   # ToyProblem
@@ -58,7 +61,7 @@ class AgentConfig(object):
   succ_max = 100
 
 class EnvironmentConfig(object):
-  env_name = 'Breakout-v0'
+  env_name = 'breakout.bin'
   # env_name = 'MontezumaRevenge-v0'
   ToyProblem = False
   if ToyProblem:

@@ -2,16 +2,24 @@ import cv2
 import gym
 import random
 import numpy as np
+import os
+
+from ALE.ale_python_interface.ale_python_interface import ALEInterface
 
 class Environment(object):
   def __init__(self, config):
-    self.env = gym.make(config.env_name)
+
+
+    #
+    # legal_actions = ale.getMinimalActionSet()
+    #
+    # screen_dims = ale.getScreenDims()
 
     screen_width, screen_height, self.action_repeat, self.random_start = \
         config.screen_width, config.screen_height, config.action_repeat, config.random_start
 
-    self.display = config.display
-    self.dims = (screen_width, screen_height)
+    # self.display = config.display
+    # self.dims = (screen_width, screen_height)
 
     self._screen = None
     self.reward = 0

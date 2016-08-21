@@ -1,10 +1,13 @@
 import random
 import tensorflow as tf
-
+import os
+from ALE.ale_python_interface.ale_python_interface import ALEInterface
+import numpy as np
 from dqn.agent import Agent
 
-from dqn.environment import GymEnvironment
-from dqn.Myenvironment import MyGymEnvironment
+#from dqn.environment import GymEnvironment
+#from dqn.Myenvironment import MyGymEnvironment
+
 from config import get_config
 import time
 import datetime
@@ -17,15 +20,15 @@ flags.DEFINE_boolean('dueling', False, 'Whether to use dueling deep q-network')
 flags.DEFINE_boolean('double_q', False, 'Whether to use double q-learning')
 
 # Environment
-flags.DEFINE_string('env_name', 'Breakout-v0', 'The name of gym environment to use')
+# flags.DEFINE_string('env_name', 'Breakout-v0', 'The name of gym environment to use')
 # flags.DEFINE_string('env_name', 'MontezumaRevenge-v0', 'The name of gym environment to use')
 flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
 flags.DEFINE_string('gpu_fraction', '1/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
-flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
-flags.DEFINE_boolean('is_train', False, 'Whether to do training or testing')
+#flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
+flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
 # import numpy as np
 # rand = np.random.randint(10,200)
 # print('rand seed:'+str(rand))
@@ -58,10 +61,21 @@ def main(_):
     # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     config.folder_name = '2016-08-18_17-26-01'
 
+
     if config.ToyProblem:
+
       env = MyGymEnvironment(config)
     else:
-      env = GymEnvironment(config)
+      env = ALEInterface()
+      rng = np.random.RandomState(123456) # DETERMINSTIC
+      env.setInt('random_seed', rng.randint(0,1000))
+      env.setBool('display_screen', config.display)
+      # self.new_env.setInt('frame_skip', self.params.frame_skip)
+      env.setFloat('repeat_action_probability', 0.)
+      env.setBool('color_averaging', True)
+      rom_dir = os.path.join(os.getcwd(), "aleroms")
+      rom_path = os.path.join(rom_dir, config.env_name)
+      env.loadROM(rom_path)
 
     if not FLAGS.use_gpu:
       config.cnn_format = 'NHWC'
