@@ -54,6 +54,7 @@ class BaseModel(object):
     if ckpt and ckpt.model_checkpoint_path:
       ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
       fname = os.path.join(mydir, ckpt_name)
+      # fname = str.decode("/home/oron/PycharmProjects/DQN_Bootstrap_ale/models/TEST/session/sess-300001")
       self.saver.restore(self.sess, fname)
       print(" [*] Load SUCCESS: %s" % fname)
       return True

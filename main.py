@@ -17,7 +17,7 @@ flags = tf.app.flags
 # Model
 flags.DEFINE_string('model', 'm1', 'Type of model')
 flags.DEFINE_boolean('dueling', False, 'Whether to use dueling deep q-network')
-flags.DEFINE_boolean('double_q', False, 'Whether to use double q-learning')
+#flags.DEFINE_boolean('double_q', False, 'Whether to use double q-learning')
 
 # Environment
 # flags.DEFINE_string('env_name', 'Breakout-v0', 'The name of gym environment to use')
@@ -27,12 +27,14 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
 flags.DEFINE_string('gpu_fraction', '1/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
-#flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
+flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
+
+
 # import numpy as np
 # rand = np.random.randint(10,200)
 # print('rand seed:'+str(rand))
-flags.DEFINE_integer('random_seed', 120, 'Value of random seed')
+flags.DEFINE_integer('random_seed', 124, 'Value of random seed')
 
 FLAGS = flags.FLAGS
 
@@ -47,7 +49,7 @@ def calc_gpu_fraction(fraction_string):
   idx, num = fraction_string.split('/')
   idx, num = float(idx), float(num)
 
-  fraction = 1 / (num - idx + 1)
+  fraction = idx/num
   print " [*] GPU : %.4f" % fraction
   return fraction
 
@@ -59,18 +61,16 @@ def main(_):
     config = get_config(FLAGS) or FLAGS
 
     # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    config.folder_name = '2016-08-18_17-26-01'
+    config.folder_name = 'ddqn_10_head'
 
 
     if config.ToyProblem:
-
       env = MyGymEnvironment(config)
     else:
       env = ALEInterface()
       rng = np.random.RandomState(123456) # DETERMINSTIC
       env.setInt('random_seed', rng.randint(0,1000))
       env.setBool('display_screen', config.display)
-      # self.new_env.setInt('frame_skip', self.params.frame_skip)
       env.setFloat('repeat_action_probability', 0.)
       env.setBool('color_averaging', True)
       rom_dir = os.path.join(os.getcwd(), "aleroms")
@@ -85,7 +85,7 @@ def main(_):
     if FLAGS.is_train:
       agent.train()
     else:
-      agent.playMy()
+      agent.test()
 
 if __name__ == '__main__':
   tf.app.run()

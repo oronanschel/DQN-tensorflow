@@ -55,9 +55,9 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
         for i in range(0, heads_num):
             avg_v[i].append(float(row['avg_v['+str(i)+']']))
         avg_loss.append(float(row['avg_loss']))
-        avg_ep_reward.append(row['avg_ep_reward'])
-        max_ep_reward.append(row['max_ep_reward'])
-        min_ep_reward.append(row['min_ep_reward'])
+        avg_ep_reward.append(float(row['avg_ep_reward']))
+        max_ep_reward.append(float(row['max_ep_reward']))
+        min_ep_reward.append(float(row['min_ep_reward']))
         num_game.append(row['num_game'])
         epsilon.append(row['epsilon'])
 
@@ -76,6 +76,8 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
 
   pp = PdfPages(save_loc)
 
+  h = filter()
+
   step = np.array([float(i) for i in step])
   step = step/10**6
   # print(avg_v)
@@ -91,11 +93,15 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   plt.close()
 
 
+  color = {'avg_ep_reward':'g', 'min_ep_reward':'r','max_ep_reward':'b'}
+  color_m = {'avg_ep_reward':'go', 'min_ep_reward':'ro','max_ep_reward':'bo'}
   # print(avg_reward)
   plt.figure()
   plt.title("Reward Stats")
   for tag in reward_tags:
-    plt.plot(step,eval(tag), label=tag)
+      smooth = np.convolve(eval(tag), h)
+      plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color[tag], label=tag, linewidth=2.0)
+      plt.plot(step, eval(tag), color_m[tag], alpha=.5)
   plt.grid(True)
   plt.xlabel('frames [millions]')
   plt.legend(loc='best')
@@ -156,6 +162,29 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
 
 
   pp.close()
+
+def filter():
+    fc = 0.1  # Cutoff frequency as a fraction of the sampling rate (in (0, 0.5)).
+    b = 0.08  # Transition band, as a fraction of the sampling rate (in (0, 0.5)).
+    N = int(np.ceil((4 / b)))
+    if not N % 2: N += 1  # Make sure that N is odd.
+    n = np.arange(N)
+
+    # Compute sinc filter.
+    h = np.sinc(2 * fc * (n - (N - 1) / 2.))
+
+    # Compute Blackman window.
+    w = 0.42 - 0.5 * np.cos(2 * np.pi * n / (N - 1)) + \
+        0.08 * np.cos(4 * np.pi * n / (N - 1))
+
+    # Multiply sinc filter with window.
+    h = h * w
+
+    # Normalize to get unity gain.
+    h = h / np.sum(h)
+
+    return h
+
 
 if __name__ == "__main__":
   plot(sys.argv[1] if len(sys.argv) > 1 else None)

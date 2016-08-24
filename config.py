@@ -7,11 +7,12 @@ class AgentConfig(object):
   frame_skip = 4
   death_ends_episode = True
 
-  batch_size = 32
+  batch_size = 32 # cannot be changed for now
   random_start = 30
   cnn_format = 'NCHW'
   discount = 0.99
   target_q_update_step = 10**4
+  # target_q_update_step = 3* 10 **3
   learning_rate = 0.0006
   learning_rate_minimum = 0.00025
   learning_rate_decay = 0.96
@@ -27,23 +28,23 @@ class AgentConfig(object):
   train_frequency = 4
 
   learn_start = 5*(10**4)
-  # learn_start = 100
+  # learn_start = 3000
 
 
   min_delta = -1
   max_delta = 1
 
-  double_q = False
+  double_q = True
   dueling = False
 
-  eval_freq =  5*(10**4)
-  # eval_freq = 300
+  eval_freq =  10*(10**4)
+  # eval_freq = 5000
 
-  save_freq = 10000
+  # save_freq = 10000
   # save_freq = 500
 
   eval_steps = 10**4
-  # eval_steps = 100
+  # eval_steps = 1000
 
   valid_size = 500
 
@@ -55,6 +56,8 @@ class AgentConfig(object):
   # test_policy = 'MajorityVote'
   # test_policy = 'Standard'
 
+
+
   # ToyProblem
   ToyProblem = False
   max_ep_possible_reward = 10
@@ -62,7 +65,8 @@ class AgentConfig(object):
 
 class EnvironmentConfig(object):
   env_name = 'breakout.bin'
-  # env_name = 'MontezumaRevenge-v0'
+  # env_name= 'battle_zone.bin'
+  # env_name= 'beam_rider.bin'
   ToyProblem = False
   if ToyProblem:
     screen_width  = 25
@@ -86,8 +90,6 @@ class M1(DQNConfig):
 def get_config(FLAGS):
   if FLAGS.model == 'm1':
     config = M1
-  elif FLAGS.model == 'm2':
-    config = M2
 
   for k, v in FLAGS.__dict__['__flags'].items():
     if k == 'gpu':

@@ -26,7 +26,7 @@ class Agent(BaseModel):
     self.lives = environment.lives()
     self.env = environment
     self.death_ends_episode = config.death_ends_episode
-    self.noop_action = 0
+    self.noop_action = 1
     self.frame_skip = config.frame_skip
     self.action_size = len(self.env.getMinimalActionSet())
     self.screen_dims = self.env.getScreenDims()
@@ -37,12 +37,8 @@ class Agent(BaseModel):
     self.p = self.config.p
     self.HEADSNUM = config.heads_num
 
-
-
     self.batch_size = config.batch_size
     self.eval_steps = config.eval_steps
-    self.save_freq = config.save_freq
-
 
     self.history = History(self.config)
     self.memory = ReplayMemory(self.config, self.model_dir)
@@ -200,6 +196,7 @@ class Agent(BaseModel):
       return
     else:
       s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample(self.valid_size)
+    terminal = np.array(terminal) + 0.
 
     q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
 
@@ -262,9 +259,10 @@ class Agent(BaseModel):
     if random.random() < ep:
       action = random.randrange(self.action_size)
     else:
-      action = self.q_action.eval({self.s_t: [s_t], self.head: current_head,self.is_training:is_training})[0]
-
-      #action = self.q_action.eval({self.s_t: [s_t]})[0]
+      action = self.q_action.eval({self.s_t: [s_t], self.head: current_head, self.is_training: is_training})[0]
+      # new_lives = self.env.lives()
+      # if new_lives < self.lives:
+      #   action = self.noop_action
 
     return action
 
@@ -294,22 +292,31 @@ class Agent(BaseModel):
     else:
       s_t, action, reward, s_t_plus_1, terminal, mask = self.memory.sample()
 
-    q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
-
-    # t - shape [32]
     terminal = np.array(terminal) + 0.
+    if self.double_q:
+      max_q_t_plus_1 = self.max_q_t_plus_1_ddqn.eval({self.s_t:s_t_plus_1,self.target_s_t:s_t_plus_1})
+      max_q_t_plus_1_slice = max_q_t_plus_1[:,0]
+      target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1_slice + reward
+      target_q_t = target_q_t.reshape(self.batch_size,1)
+      for k in range(1,self.HEADSNUM):
+        max_q_t_plus_1_slice = max_q_t_plus_1[:, k]
+        target_q_t_slice = (1. - terminal) * self.discount * max_q_t_plus_1_slice + reward
+        target_q_t_slice = target_q_t_slice.reshape(self.batch_size, 1)
+        target_q_t = np.concatenate( (target_q_t,target_q_t_slice), axis=1)
 
-    q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0,self.action_size)]]
-    max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
-    target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-    target_q_t = target_q_t.reshape(self.batch_size,1)
-    for k in range(1,self.HEADSNUM):
-      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.action_size*k, self.action_size*(k+1))]]
-      max_q_t_plus_1 =  np.max( q_t_plus_1_slice, axis=1)
-      target_q_t_slice =  (1. - terminal) * self.discount * max_q_t_plus_1 + reward
-      target_q_t_slice = target_q_t_slice.reshape(self.batch_size,1)
-      target_q_t = np.concatenate(  (target_q_t,target_q_t_slice), axis=1)
-      # TODO: Think about mixing the targets
+    else:
+      q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
+
+      q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(0,self.action_size)]]
+      max_q_t_plus_1 = np.max(q_t_plus_1_slice, axis=1)
+      target_q_t = (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+      target_q_t = target_q_t.reshape(self.batch_size,1)
+      for k in range(1,self.HEADSNUM):
+        q_t_plus_1_slice = q_t_plus_1[:, [i for i in range(self.action_size*k, self.action_size*(k+1))]]
+        max_q_t_plus_1 =  np.max( q_t_plus_1_slice, axis=1)
+        target_q_t_slice =  (1. - terminal) * self.discount * max_q_t_plus_1 + reward
+        target_q_t_slice = target_q_t_slice.reshape(self.batch_size,1)
+        target_q_t = np.concatenate(  (target_q_t,target_q_t_slice), axis=1)
 
     _ = self.sess.run([self.optim], {
     self.target_q_t: target_q_t,
@@ -334,8 +341,6 @@ class Agent(BaseModel):
       else:
         self.s_t = tf.placeholder('float32',
             [None, self.history_length, self.screen_width, self.screen_height], name='s_t')
-
-
 
       if self.config.ToyProblem:
         shape = self.s_t.get_shape().as_list()
@@ -374,53 +379,57 @@ class Agent(BaseModel):
         self.l4, self.w['l4_w'], self.w['l4_b'] = linear(self.l3_flat, 512, activation_fn=activation_fn, name='l4')
         self.q, self.w['q_w'], self.w['q_b'] = linear(self.l4, self.action_size*self.HEADSNUM, name='q')
 
-      # action selection policy
-      self.head = tf.placeholder('int32', name='head')
-      self.is_training = tf.placeholder(tf.bool, name = 'is_training')
-      if self.config.test_policy == 'Ensemble':
-        # test action
-        q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in range(0,self.HEADSNUM)]
-        self.tmp_q_sum = tf.accumulate_n(q_heads_l_policy)
+      with tf.variable_scope('action_selection'):
+        # action selection policy
+        self.head = tf.placeholder('int32', name='head')
+        self.is_training = tf.placeholder(tf.bool, name = 'is_training')
+        if self.config.test_policy == 'Ensemble':
+          # test action
+          q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in range(0,self.HEADSNUM)]
+          self.tmp_q_sum = tf.accumulate_n(q_heads_l_policy)
 
-        self.q_action_test = tf.argmax(self.tmp_q_sum, dimension=1)
-        # train action
-        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
-        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
-        # action node
-        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+          self.q_action_test = tf.argmax(self.tmp_q_sum, dimension=1)
+          # train action
+          tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+          self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+          # action node
+          self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
 
-      elif self.config.test_policy == 'MajorityVote':
-        # test action
-        q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in
-                            range(0, self.HEADSNUM)]
+        elif self.config.test_policy == 'MajorityVote':
+          # test action
+          q_heads_l_policy = [tf.slice(self.q, [0, k * self.action_size], [1, self.action_size]) for k in
+                              range(0, self.HEADSNUM)]
 
-        q_head_votes = [tf.argmax(q_h_tmp, dimension=1) for q_h_tmp in q_heads_l_policy]
+          q_head_votes = [tf.argmax(q_h_tmp, dimension=1) for q_h_tmp in q_heads_l_policy]
 
-        self.y, _, self.count = tf.unique_with_counts(tf.concat(0,q_head_votes))
+          for a in range(self.action_size):
+            q_head_votes.append([tf.constant(a,dtype='int64')])
 
-        self.max_ind = tf.argmax(self.count,dimension=0)
-        #TODO: Do one hot vector to extract q_action_test
+          y, _, count = tf.unique_with_counts(tf.concat(0,q_head_votes))
 
-        self.q_action_test = [0]
-        # train action
-        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
-        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
-        # action node
-        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+          max_ind = tf.argmax(count,dimension=0)
+          tmp_one_hot = tf.one_hot(max_ind, self.action_size,dtype='int64')
 
-      elif self.config.test_policy == 'MaxQHead':
-        # test action
-        self.q_action_test = tf.argmax(self.q, dimension=1) % self.action_size
-        # train action
-        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
-        self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
-        # action node
-        self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+          self.q_action_test = tf.reduce_sum(tf.mul(tmp_one_hot,y))
 
-      else:
-        tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
-        self.q_action = tf.argmax(tmp_q_slice, dimension=1)
+          # train action
+          tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+          self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+          # action node
+          self.q_action = tf.select([self.is_training], self.q_action_train, [self.q_action_test])
 
+        elif self.config.test_policy == 'MaxQHead':
+          # test action
+          self.q_action_test = tf.argmax(self.q, dimension=1) % self.action_size
+          # train action
+          tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+          self.q_action_train = tf.argmax(tmp_q_slice, dimension=1)
+          # action node
+          self.q_action = tf.select([self.is_training], self.q_action_train, self.q_action_test)
+
+        else:
+          tmp_q_slice = tf.slice(self.q, [0, self.head * self.action_size], [-1, self.action_size])
+          self.q_action = tf.argmax(tmp_q_slice, dimension=1)
 
     # target network
     with tf.variable_scope('target'):
@@ -471,6 +480,28 @@ class Agent(BaseModel):
 
       self.target_q_idx = tf.placeholder('int32', [None, None], 'outputs_idx')
       self.target_q_with_idx = tf.gather_nd(self.target_q, self.target_q_idx)
+
+      # Max Q(s1,argmaxQ'(s1,))
+      q_heads_list = [tf.slice(self.q, [0, k * self.action_size], [-1, self.action_size]) for k in
+                          range(0, self.HEADSNUM)]
+      self.q_max_ind_l = [tf.argmax(q_heads_list[k], dimension=1) for k in range(0,self.HEADSNUM)]
+      self.t_q_heads_list = [tf.slice(self.target_q, [0, k * self.action_size], [-1, self.action_size]) for k in
+                          range(0, self.HEADSNUM)]
+      self.one_hots_q_a = [tf.one_hot(action,self.action_size) for action in self.q_max_ind_l]
+
+
+      self.max_q_t_ddqn_list  = [ tf.mul(self.one_hots_q_a[k],self.t_q_heads_list[k]) for k in range(0,self.HEADSNUM)]
+      self.max_q_t_ddqn_list_reduced = [tf.reduce_sum(self.max_q_t_ddqn_list[k],reduction_indices=1) for k in range(0,self.HEADSNUM)]
+      self.max_q_t_ddqn_list_reduced_resh =  [tf.reshape(self.max_q_t_ddqn_list_reduced[k],[self.batch_size,1]) for k in range(0,self.HEADSNUM)]
+
+      self.max_q_t_plus_1_ddqn = tf.concat(1,self.max_q_t_ddqn_list_reduced_resh)
+
+
+     # self.q_max_ind_c = tf.concat(1,self.q_max_ind_l)
+
+      #self.max_q_t_plus_1_ddqn = tf.gather_nd(self.target_q, self.q_max_ind_l)
+
+
 
     with tf.variable_scope('pred_to_target'):
       self.t_w_input = {}
@@ -591,7 +622,7 @@ class Agent(BaseModel):
 
     tf.initialize_all_variables().run()
 
-    self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=30)
+    self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=120)
 
     self.load_model()
     self.update_target_q_network()
@@ -628,88 +659,47 @@ class Agent(BaseModel):
     for summary_str in summary_str_lists:
       self.writer.add_summary(summary_str, self.step)
 
-  def playMy(self, n_step=100000, _test_ep=0.01, render=False):
+  def test(self, n_step=100000, _test_ep=0.000001, render=False):
 
-    screen, reward, action, terminal = self.env.new_random_game()
     ep_rewards = []
     ep_reward = 0
 
-    for _ in range(self.history_length):
-      self.history.add(screen)
+    self.env.reset_game()
+    self.new_random_game()
     self.current_head = 0
+    curr_lives = self.env.lives()
 
     for estep in tqdm(range(n_step), ncols=70):
       # 1. predict
       action = self.predict(self.history.get(), self.current_head, test_ep=_test_ep, is_training=False)
       # 2. act
-      env_action = 0
-      if (action == 1):
-        env_action = 3  # LEFT
-      elif (action == 2):
-        env_action = 4  # RIGHT
+      # new_lives = self.env.lives()
+      # if new_lives < curr_lives:
+      #   action = self.noop_action
+      # curr_lives = new_lives
 
-      screen, reward, terminal = self.env.act(env_action, is_training=False)
+      screen, reward, terminal = self.act(action)
       self.history.add(screen)
 
       ep_reward += reward
 
       if terminal == True:
-        screen, reward, action, terminal = self.env.new_random_game()
+        self.env.reset_game()
+        self.new_random_game()
+
         ep_rewards.append(ep_reward)
         ep_reward = 0
-
 
       if estep % 1000 == 0 and len(ep_rewards) > 0:
         max_ep_reward = np.max(ep_rewards)
         min_ep_reward = np.min(ep_rewards)
         avg_ep_reward = np.mean(ep_rewards)
+        std_ep_reward = np.std(ep_rewards)
 
         print ('\nframes:' + str(estep)
                +'\nmax episode reward:'+str(max_ep_reward)
                +'\navg episode reward:' + str(avg_ep_reward)
-               + '\nmin episode reward:' + str(min_ep_reward)
+               +'\nmin episode reward:' + str(min_ep_reward)
+               +'\nstd episode rewards:' + str(std_ep_reward)
                )
 
-
-
-  def play(self, n_step=10000, n_episode=100, test_ep=None, render=False):
-    if test_ep == None:
-      test_ep = self.ep_end
-
-    test_history = History(self.config)
-
-    if not self.display:
-      gym_dir = '/tmp/%s-%s' % (self.env_name, get_time())
-      self.env.env.monitor.start(gym_dir)
-
-    best_reward, best_idx = 0, 0
-    for idx in xrange(n_episode):
-      screen, reward, action, terminal = self.env.new_random_game()
-      current_reward = 0
-
-      for _ in range(self.history_length):
-        test_history.add(screen)
-
-      for t in tqdm(range(n_step), ncols=70):
-        # 1. predict
-        action = self.predict(test_history.get(), test_ep,is_training=False)
-        # 2. act
-        screen, reward, terminal = self.env.act(action+1, is_training=False)
-        # 3. observe
-        test_history.add(screen)
-
-        current_reward += reward
-        if terminal:
-          break
-
-      if current_reward > best_reward:
-        best_reward = current_reward
-        best_idx = idx
-
-      print "="*30
-      print " [%d] Best reward : %d" % (best_idx, best_reward)
-      print "="*30
-
-    if not self.display:
-      self.env.env.monitor.close()
-      #gym.upload(gym_dir, writeup='https://github.com/devsisters/DQN-tensorflow', api_key='')
