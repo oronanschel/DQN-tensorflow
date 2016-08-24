@@ -14,6 +14,7 @@ from .replay_memory import ReplayMemory
 from utils import get_time, save_pkl, load_pkl
 from matplotlib import pyplot as plt
 import scipy ,cv2
+import unicodedata
 
 class Agent(BaseModel):
   def __init__(self, config, environment, sess):
@@ -62,11 +63,13 @@ class Agent(BaseModel):
       folder_name = _folder_name
     else:
       folder_name = self.config.folder_name
-      # folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     self.mydir = os.path.join(tempdir, folder_name)
-    self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
+    if hasattr(self.config,'prog_file'):
+      self.prog_file = os.path.join(self.mydir, self.config.prog_file)
+    else:
+      self.prog_file = os.path.join(self.mydir, 'training_progress.csv')
     folder_existed = self.create_dir(self.mydir)
-    if folder_existed == False:
+    if folder_existed == False or hasattr(self.config,'prog_file'):
       data_file = open(self.prog_file, 'wb')
       data_file.write('avg_loss,avg_ep_reward,max_ep_reward,min_ep_reward,num_game,epsilon,'
                       'l1_grad_l1_norm,l2_grad_l1_norm,l3_grad_l1_norm,l4_grad_l1_norm,l1_l1_norm,l2_l1_norm,l3_l1_norm,l4_l1_norm'
@@ -197,6 +200,7 @@ class Agent(BaseModel):
     else:
       s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample(self.valid_size)
     terminal = np.array(terminal) + 0.
+
 
     q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
 
@@ -622,7 +626,7 @@ class Agent(BaseModel):
 
     tf.initialize_all_variables().run()
 
-    self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=120)
+    self._saver = tf.train.Saver(self.w.values() + [self.step_op], max_to_keep=200)
 
     self.load_model()
     self.update_target_q_network()
@@ -659,7 +663,7 @@ class Agent(BaseModel):
     for summary_str in summary_str_lists:
       self.writer.add_summary(summary_str, self.step)
 
-  def test(self, n_step=100000, _test_ep=0.000001, render=False):
+  def test(self, n_step=100000, _test_ep=10**-2, render=False):
 
     ep_rewards = []
     ep_reward = 0
@@ -703,3 +707,69 @@ class Agent(BaseModel):
                +'\nstd episode rewards:' + str(std_ep_reward)
                )
 
+  def testOnSaved(self, n_step=2*10**4, _test_ep=10**-2):
+
+    models_list = self.saved_model_list()
+
+    itr = 0
+    for model in models_list:
+      itr +=1
+
+      print('model: '+str(itr)+':'+str(len(models_list))+'  '+str(int(100*float(itr)/len(models_list)))+'%')
+      self.load_model_i(model)
+
+      self.step = self.step_op.eval()
+
+      num_game, ep_reward = 0, 0.
+      ep_rewards, actions = [], []
+      num_game = 0
+
+      self.current_head = 0
+      self.env.reset_game()
+      self.new_random_game()
+
+      for estep in tqdm(range(0, n_step), ncols=70, initial=0):
+        # 1. predict
+        action = self.predict(self.history.get(), self.current_head, test_ep=_test_ep, is_training=False)
+
+        # 2. act
+        screen, reward, terminal = self.act(action)
+        mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
+        self.history.add(screen)
+        self.memory.add(screen,reward,action,terminal,mask)
+
+
+        if terminal == True:
+          self.env.reset_game()
+          self.new_random_game()
+
+          num_game += 1
+          ep_rewards.append(ep_reward)
+          ep_reward = 0.
+        else:
+          ep_reward += reward
+
+      ep_rewards.append(ep_reward)
+
+      try:
+        max_ep_reward = np.max(ep_rewards)
+        min_ep_reward = np.min(ep_rewards)
+        avg_ep_reward = np.mean(ep_rewards)
+      except:
+        max_ep_reward, min_ep_reward, avg_ep_reward = 0, 0, 0
+
+      # gradients, weights sample
+      g_w_l1_norm = self.gradient_weights_l1_norm()
+
+      lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
+
+      ep_rec = (self.ep_end + max(0., (self.ep_start - self.ep_end) * (
+      self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+      self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
+                          ep_rec, g_w_l1_norm, lr, self.step)
+
+      print '\navg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
+            % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
+
+      _pdfloc  = self.config.prog_file.split('.')[0] + '.pdf'
+      plot(self.mydir, heads_num=self.HEADSNUM,pdf_loc=_pdfloc, csv_loc=self.config.prog_file)

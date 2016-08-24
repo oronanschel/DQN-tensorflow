@@ -4,9 +4,7 @@ import os
 from ALE.ale_python_interface.ale_python_interface import ALEInterface
 import numpy as np
 from dqn.agent import Agent
-
-
-
+from config import get_config
 
 flags = tf.app.flags
 
@@ -22,8 +20,6 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
 flags.DEFINE_string('gpu_fraction', '1/6', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
-
-
 flags.DEFINE_integer('random_seed', 120, 'Value of random seed')
 
 FLAGS = flags.FLAGS
@@ -39,7 +35,7 @@ def calc_gpu_fraction(fraction_string):
   idx, num = fraction_string.split('/')
   idx, num = float(idx), float(num)
 
-  fraction = 1 / (num - idx + 1)
+  fraction = idx/num
   print " [*] GPU : %.4f" % fraction
   return fraction
 
@@ -49,15 +45,11 @@ def main(_):
 
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 
-    # folder name inside the model dir
-    folder_name = 'TEST'
-
-
-
-    from 'models.Diiferent_heads_different_p_different_test_policy.2016-08-21_15-32-31.config' import get_config
     config = get_config(FLAGS) or FLAGS
 
-    config.folder_name = folder_name
+    # folder name inside the model dir
+    config.folder_name = 'standard_dqn_10_head'
+    config.prog_file   = 'test_results_majority.csv'
 
     env = ALEInterface()
     rng = np.random.RandomState(123456) # DETERMINSTIC
@@ -74,8 +66,7 @@ def main(_):
 
     agent = Agent(config, env, sess)
 
-
-    agent.test()
+    agent.testOnSaved()
 
 if __name__ == '__main__':
   tf.app.run()

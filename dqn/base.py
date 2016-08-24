@@ -62,6 +62,24 @@ class BaseModel(object):
       print(" [!] Load FAILED: %s" % self.checkpoint_dir)
       return False
 
+  def load_model_i(self,fname):
+    self.saver.restore(self.sess, fname)
+    print(" [*] Load SUCCESS: %s" % fname)
+
+  def saved_model_list(self):
+    print(" [*] Loading checkpoints...")
+
+    tempdir = os.path.join(os.getcwd(), "models")
+    folder_name = self.config.folder_name + '/session'
+    mydir = os.path.join(tempdir, folder_name)
+    files_t = os.listdir(mydir)
+    files_tt =  [s for s in files_t if not s.endswith('.meta') ]
+    files = [s for s in files_tt if s.startswith('sess-') ]
+    order = [int(s.split('-')[1]) for s in files]
+    models = [ os.path.join(mydir, x) for (y,x) in sorted(zip(order,files))]
+
+    return models
+
   @property
   def checkpoint_dir(self):
     return os.path.join('checkpoints', self.model_dir)

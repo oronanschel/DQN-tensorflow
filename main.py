@@ -61,7 +61,7 @@ def main(_):
     config = get_config(FLAGS) or FLAGS
 
     # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    config.folder_name = 'ddqn_10_head'
+    config.folder_name = 'standard_dqn_1_head'
 
 
     if config.ToyProblem:

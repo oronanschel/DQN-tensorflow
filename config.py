@@ -34,11 +34,11 @@ class AgentConfig(object):
   min_delta = -1
   max_delta = 1
 
-  double_q = True
+  double_q = False
   dueling = False
 
-  eval_freq =  10*(10**4)
-  # eval_freq = 5000
+  eval_freq =  125*(10**3)
+  # eval_freq = 1000
 
   # save_freq = 10000
   # save_freq = 500
@@ -51,9 +51,9 @@ class AgentConfig(object):
   # Bootstrap
   heads_num = 10
   p  = 1
-  test_policy = 'Ensemble'
+  # test_policy = 'Ensemble'
   # test_policy = 'MaxQHead'
-  # test_policy = 'MajorityVote'
+  test_policy = 'MajorityVote'
   # test_policy = 'Standard'
 
 
