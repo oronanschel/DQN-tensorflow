@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import csv, pdb, sys
 from matplotlib.backends.backend_pdf import PdfPages
 from config import get_config
@@ -10,8 +11,14 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
 
 
   avg_v_tag = []
+  q_diff_tag = []
+  p_diff_tag = []
   for i in range(0,heads_num):
       avg_v_tag.append('avg_v['+str(i)+']')
+      q_diff_tag.append('q_diff['+str(i)+']')
+      p_diff_tag.append('p_diff[' + str(i) + ']')
+
+
 
   lr_tag = {'lr'}
   reward_tags = {'avg_ep_reward', 'min_ep_reward','max_ep_reward'}
@@ -27,13 +34,17 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   with open(open_loc) as csvfile:
     reader = csv.DictReader(csvfile)
     avg_v = []
+    p_diff = []
+    q_diff = []
     for i in range(0, heads_num):
         avg_v.append([])
+        p_diff.append([])
+        q_diff.append([])
+
 
     avg_ep_reward = []
     max_ep_reward = []
     min_ep_reward = []
-    num_game = []
     epsilon = []
 
     l1_grad_l1_norm = []
@@ -54,6 +65,8 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
     for row in reader:
         for i in range(0, heads_num):
             avg_v[i].append(float(row['avg_v['+str(i)+']']))
+            p_diff[i].append(float(row['p_diff['+str(i)+']']))
+            q_diff[i].append(float(row['q_diff[' + str(i) + ']']))
         avg_loss.append(float(row['avg_loss']))
         avg_ep_reward.append(float(row['avg_ep_reward']))
         max_ep_reward.append(float(row['max_ep_reward']))
@@ -80,6 +93,7 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
 
   step = np.array([float(i) for i in step])
   step = step/10**6
+
   # print(avg_v)
   plt.figure()
   for i in range(0,heads_num):
@@ -102,6 +116,35 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
       smooth = np.convolve(eval(tag), h)
       plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color[tag], label=tag, linewidth=2.0)
       plt.plot(step, eval(tag), color_m[tag], alpha=.5)
+  plt.grid(True)
+  plt.xlabel('frames [millions]')
+  plt.legend(loc='best')
+  plt.savefig(pp, format='pdf')
+  plt.close()
+
+  cm_subsection = np.linspace(0, 1, heads_num)
+  color = [cm.jet(x) for x in cm_subsection]
+  # print(diff_p)
+  plt.figure()
+  for i in range(0,heads_num):
+      smooth = np.convolve(p_diff[i], h)
+      plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color = color[i], label='q['+str(i)+']', linewidth=2.0)
+      plt.plot(step, p_diff[i], color = color[i],marker='o',linestyle=' ', alpha=.5)
+  plt.title("Avarage Policy Difference from Ensemble")
+  plt.grid(True)
+  plt.xlabel('frames [millions]')
+  plt.legend(loc='best')
+  plt.savefig(pp, format='pdf')
+  plt.close()
+
+  # print(diff_q)
+  plt.figure()
+  for i in range(0,heads_num):
+      smooth = np.convolve(q_diff[i], h)
+      plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color = color[i], label='q['+str(i)+']', linewidth=2.0)
+      plt.plot(step, q_diff[i], color = color[i],marker='o',linestyle=' ', alpha=.5)
+
+  plt.title("Avarage ||Q_k Q_{ensemble}||_2^2")
   plt.grid(True)
   plt.xlabel('frames [millions]')
   plt.legend(loc='best')
@@ -153,12 +196,6 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
       plt.legend(loc='best')
       plt.savefig(pp, format='pdf')
       plt.close()
-
-
-
-
-
-
 
 
   pp.close()

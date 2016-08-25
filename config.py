@@ -13,8 +13,10 @@ class AgentConfig(object):
   discount = 0.99
   target_q_update_step = 10**4
   # target_q_update_step = 3* 10 **3
-  learning_rate = 0.0006
+  learning_rate = 0.00025
   learning_rate_minimum = 0.00025
+  # learning_rate = 0.00018
+  # learning_rate_minimum = 0.00018
   learning_rate_decay = 0.96
   learning_rate_decay_step = 50000
 
@@ -26,34 +28,35 @@ class AgentConfig(object):
 
   history_length = 4
   train_frequency = 4
+  # train_frequency = 2
 
-  learn_start = 5*(10**4)
-  # learn_start = 3000
+  # learn_start = 5*(10**4)
+  learn_start = 3000
 
 
   min_delta = -1
   max_delta = 1
 
-  double_q = False
+  double_q = True
   dueling = False
 
-  eval_freq =  125*(10**3)
-  # eval_freq = 1000
+  # eval_freq =  100*(10**3)
+  eval_freq = 1000
 
   # save_freq = 10000
   # save_freq = 500
 
-  eval_steps = 10**4
-  # eval_steps = 1000
+  # eval_steps = 10**4
+  eval_steps = 1000
 
-  valid_size = 500
+  valid_size = 1000
 
   # Bootstrap
-  heads_num = 10
+  heads_num = 5
   p  = 1
-  # test_policy = 'Ensemble'
+  test_policy = 'Ensemble'
   # test_policy = 'MaxQHead'
-  test_policy = 'MajorityVote'
+  # test_policy = 'MajorityVote'
   # test_policy = 'Standard'
 
 
@@ -65,6 +68,7 @@ class AgentConfig(object):
 
 class EnvironmentConfig(object):
   env_name = 'breakout.bin'
+  # env_name = 'alien.bin'
   # env_name= 'battle_zone.bin'
   # env_name= 'beam_rider.bin'
   ToyProblem = False

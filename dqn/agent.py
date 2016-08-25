@@ -44,8 +44,11 @@ class Agent(BaseModel):
     self.history = History(self.config)
     self.memory = ReplayMemory(self.config, self.model_dir)
 
+    # statistics
     self.avg_v = 0
     self.avg_loss = 0
+    self.p_diff = 0
+    self.q_diff = 0
 
     with tf.variable_scope('step'):
       self.step_op = tf.Variable(0, trainable=False, name='step')
@@ -76,18 +79,26 @@ class Agent(BaseModel):
                       ',lr,step,')
       for i in range(0,self.HEADSNUM):
         data_file.write('avg_v['+str(i)+'],')
+      for i in range(0,self.HEADSNUM):
+        data_file.write('p_diff['+str(i)+'],')
+      for i in range(0,self.HEADSNUM):
+        data_file.write('q_diff['+str(i)+'],')
       data_file.write('heads_num,')
       data_file.write('\n')
       data_file.close()
 
   def update_results(self, avg_loss, avg_v, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,ep,
-                     l1_norm,lr,step):
+                     l1_norm,lr,step,p_diff,q_diff):
       fd = open(self.prog_file,'a')
       fd.write('%f,%f,%f,%f,%f,%f,' % ( avg_loss, avg_ep_reward, max_ep_reward, min_ep_reward, num_game, ep))
       fd.write('%f,%f,%f,%f,%f,%f,%f,%f,' % ( l1_norm[0],l1_norm[1],l1_norm[2],l1_norm[3],l1_norm[4],l1_norm[5],l1_norm[6],l1_norm[7] ))
       fd.write('%f,%d,' % (lr,step))
       for i in range(0, self.HEADSNUM):
         fd.write('%f,' % (avg_v[i]))
+      for i in range(0, self.HEADSNUM):
+        fd.write('%f,' % (p_diff[i]))
+      for i in range(0, self.HEADSNUM):
+        fd.write('%f,' % (q_diff[i]))
       fd.write('%d,' % (self.HEADSNUM))
       fd.write('\n')
       fd.close()
@@ -182,12 +193,13 @@ class Agent(BaseModel):
 
         # gradients, weights sample
         g_w_l1_norm = self.gradient_weights_l1_norm()
+        self.similraty_measure()
 
         lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
         ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
         self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                            ep_rec,g_w_l1_norm,lr,self.step)
+                            ep_rec,g_w_l1_norm,lr,self.step,self.p_diff,self.q_diff)
 
         print '\navg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
               % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)
@@ -200,7 +212,6 @@ class Agent(BaseModel):
     else:
       s_t, action, reward, s_t_plus_1, terminal ,mask = self.memory.sample(self.valid_size)
     terminal = np.array(terminal) + 0.
-
 
     q_t_plus_1 = self.target_q.eval({self.target_s_t: s_t_plus_1})
 
@@ -244,16 +255,20 @@ class Agent(BaseModel):
       self.max_q_t_plus_1 : max_q_t_plus_1
     })
 
-
-
     self.avg_loss = avg_loss[0]
-
-    #TODO: compute v avrage
     self.v_avg = avg_v
 
-
-
     return grads_weights_samp
+
+  def similraty_measure(self):
+    if self.memory.count < self.history_length:
+      return
+    else:
+      s_t, action, reward, s_t_plus_1, terminal, mask = self.memory.sample(self.valid_size)
+
+      # policy's probabilty of being different from ensemble policy
+      self.p_diff = self.sess.run([x for x in self.policy_diff],{self.s_t:s_t})
+      self.q_diff = self.sess.run([x for x in self.q_l2_diff],{self.s_t:s_t})
 
   def predict(self, s_t, current_head, test_ep=None,is_training=True):
 
@@ -556,19 +571,32 @@ class Agent(BaseModel):
 
       # Validation Statistics
       self.max_q_t_plus_1 = tf.placeholder('float32', [None, self.HEADSNUM], name='max_q_t_plus_1')
-      avg_v_l = []
       q_acted_l_valid = []
       for k in range(0, self.HEADSNUM):
         action_one_hot_slice_valid = tf.one_hot(self.action, self.action_size, 1.0, 0.0, name='action_one_hot_valid')
         q_slice_valid = tf.slice(self.q, [0, k * self.action_size], [-1, self.action_size])
         q_acted_slice_valid = tf.reduce_sum(q_slice_valid * action_one_hot_slice_valid, reduction_indices=1, name='q_acted_valid')
         q_acted_slice_valid = tf.reshape(q_acted_slice_valid, [self.valid_size, 1])
-        max_q_t_plus_1_slice = tf.slice(self.q, [0, k], [-1, 1])
-        avg_v_slice = tf.mul(q_acted_slice_valid,max_q_t_plus_1_slice)
-        avg_v_l.append(tf.reduce_mean(avg_v_slice))
         q_acted_l_valid.append(q_acted_slice_valid)
 
-      self.avg_v = avg_v_l
+
+      # average v
+      self.q_s_list  = [tf.slice(self.q, [0, k * self.action_size], [-1, self.action_size]) for k in range(0,self.HEADSNUM)]
+      self.avg_v = [tf.reduce_mean(tf.reduce_max(q_k,reduction_indices=1)) for q_k in self.q_s_list]
+
+
+      # policy's probabilty of being different from ensemble policy
+      self.ensemble_q = tf.accumulate_n(self.q_s_list,shape=[self.valid_size,self.action_size])/self.HEADSNUM
+
+      self.action_chosen = [tf.argmax(q_k,1) for q_k in self.q_s_list]
+      self.ensemble_action = tf.argmax(self.ensemble_q,1)
+
+      self.policy_diff = [tf.reduce_mean(tf.to_float(tf.equal(p_k, self.ensemble_action))) for p_k in self.action_chosen]
+
+      self.q_l2_diff = [tf.reduce_mean(tf.square(tf.sub(q_k,self.ensemble_q))) for q_k in self.q_s_list]
+
+
+      # loss stats
       q_acted_valid = tf.concat(1, q_acted_l_valid)
 
       self.delta_valid = self.target_q_t - q_acted_valid
@@ -707,7 +735,7 @@ class Agent(BaseModel):
                +'\nstd episode rewards:' + str(std_ep_reward)
                )
 
-  def testOnSaved(self, n_step=2*10**4, _test_ep=10**-2):
+  def testOnSaved(self, n_step=10**4, _test_ep=10**-2):
 
     models_list = self.saved_model_list()
 
@@ -760,13 +788,14 @@ class Agent(BaseModel):
 
       # gradients, weights sample
       g_w_l1_norm = self.gradient_weights_l1_norm()
+      self.similraty_measure()
 
       lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
       ep_rec = (self.ep_end + max(0., (self.ep_start - self.ep_end) * (
       self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
       self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
-                          ep_rec, g_w_l1_norm, lr, self.step)
+                          ep_rec, g_w_l1_norm, lr, self.step,self.p_diff,self.q_diff)
 
       print '\navg_l: %.6f, avg_q: %3.6f, avg_ep_r: %.4f, max_ep_r: %.4f, min_ep_r: %.4f, # game: %d' \
             % (self.avg_loss, np.mean(self.v_avg), avg_ep_reward, max_ep_reward, min_ep_reward, num_game)

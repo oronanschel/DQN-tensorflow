@@ -6,7 +6,7 @@ import numpy as np
 from dqn.agent import Agent
 
 #from dqn.environment import GymEnvironment
-#from dqn.Myenvironment import MyGymEnvironment
+from dqn.Myenvironment import MyGymEnvironment
 
 from config import get_config
 import time
@@ -26,7 +26,7 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
-flags.DEFINE_string('gpu_fraction', '1/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
+flags.DEFINE_string('gpu_fraction', '2/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
 
@@ -61,7 +61,7 @@ def main(_):
     config = get_config(FLAGS) or FLAGS
 
     # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    config.folder_name = 'standard_dqn_1_head'
+    config.folder_name = 'dTSET'
 
 
     if config.ToyProblem:
