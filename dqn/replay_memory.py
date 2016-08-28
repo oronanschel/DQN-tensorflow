@@ -19,10 +19,10 @@ class ReplayMemory:
 
     self.masks = np.empty((self.memory_size,self.HEADSNUM), dtype=np.float32)
 
-    self.screens = np.empty((self.memory_size, config.screen_width, config.screen_height), dtype = np.float16)
+    self.screens = np.empty((self.memory_size, config.screen_height,config.screen_width), dtype = np.float16)
     self.terminals = np.empty(self.memory_size, dtype = np.bool)
     self.history_length = config.history_length
-    self.dims = (config.screen_width,config.screen_height)
+    self.dims = (config.screen_height,config.screen_width)
     self.batch_size = config.batch_size
     self.count = 0
     self.current = 0
@@ -75,7 +75,8 @@ class ReplayMemory:
           continue
         # if wraps over episode end, then get new one
         # NB! poststate (last screen) can be terminal state!
-        if self.terminals[(index - self.history_length):index].any():
+        # if self.terminals[(index - self.history_length):index].any():
+        if self.terminals[index-1] == True:
           continue
         # otherwise use this index
         break
@@ -94,7 +95,7 @@ class ReplayMemory:
 
     if self.cnn_format == 'NHWC':
       return np.transpose(self.prestates, (0, 2, 3, 1)), actions, \
-        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals
+        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals, masks
     else:
       return self.prestates, actions, rewards, self.poststates, terminals, masks
 

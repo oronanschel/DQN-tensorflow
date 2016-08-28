@@ -118,7 +118,12 @@ class Agent(BaseModel):
     return resized
 
   def new_random_game(self):
-    num_actions = np.random.randint(4, self.random_start)
+
+    if self.config.ToyProblem:
+      num_actions = 4
+    else:
+      num_actions = np.random.randint(4, self.random_start)
+
     for i in range(num_actions):
       self.env.act(self.noop_action)
       self.history.add(self.get_observation())
@@ -160,18 +165,20 @@ class Agent(BaseModel):
         self.save_model(self.step+1)
 
         num_game, ep_reward = 0, 0.
-        ep_rewards, actions = [], []
+        ep_rewards =  []
         num_game = 0
-
+        actions = []
         self.env.reset_game()
         self.new_random_game()
         for estep in range(0,self.eval_steps):
           # 1. predict
-          action = self.predict(self.history.get(), self.current_head,test_ep=0.01,is_training=False)
+          action = self.predict(self.history.get(), self.current_head,test_ep=0.001,is_training=False)
+          actions.append(action)
           # 2. act
           screen, reward, terminal = self.act(action)
           self.history.add(screen)
 
+          ep_reward += reward
           if terminal==True:
             self.env.reset_game()
             self.new_random_game()
@@ -180,9 +187,9 @@ class Agent(BaseModel):
             ep_rewards.append(ep_reward)
             ep_reward = 0.
             # replace playing head
-          else:
-            ep_reward += reward
 
+        num_game += 1
+        ep_rewards.append(ep_reward)
 
         try:
           max_ep_reward = np.max(ep_rewards)
@@ -272,9 +279,11 @@ class Agent(BaseModel):
 
   def predict(self, s_t, current_head, test_ep=None,is_training=True):
 
+
+    step = self.step
     ep = test_ep or (self.ep_end +
         max(0., (self.ep_start - self.ep_end)
-          * (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+          * (self.ep_end_t - max(0., step - self.learn_start)) / self.ep_end_t))
     if random.random() < ep:
       action = random.randrange(self.action_size)
     else:
@@ -359,7 +368,7 @@ class Agent(BaseModel):
             [None, self.screen_width, self.screen_height, self.history_length], name='s_t')
       else:
         self.s_t = tf.placeholder('float32',
-            [None, self.history_length, self.screen_width, self.screen_height], name='s_t')
+            [None, self.history_length, self.screen_height, self.screen_width], name='s_t')
 
       if self.config.ToyProblem:
         shape = self.s_t.get_shape().as_list()
@@ -457,7 +466,7 @@ class Agent(BaseModel):
             [None, self.screen_width, self.screen_height, self.history_length], name='target_s_t')
       else:
         self.target_s_t = tf.placeholder('float32', 
-            [None, self.history_length, self.screen_width, self.screen_height], name='target_s_t')
+            [None, self.history_length, self.screen_height, self.screen_width], name='target_s_t')
 
       if self.config.ToyProblem:
         shape = self.target_s_t.get_shape().as_list()

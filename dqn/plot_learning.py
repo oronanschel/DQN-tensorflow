@@ -94,10 +94,13 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   step = np.array([float(i) for i in step])
   step = step/10**6
 
+
+  cm_subsection = np.linspace(0, 1, heads_num)
+  color = [cm.jet(x) for x in cm_subsection]
   # print(avg_v)
   plt.figure()
   for i in range(0,heads_num):
-      plt.plot(step,avg_v[i], label='avg_v['+str(i)+']')
+      plt.plot(step,avg_v[i], label='avg_v['+str(i)+']',color=color[i])
 
   plt.title("avg v")
   plt.grid(True)
@@ -107,23 +110,23 @@ def plot(filename, pdf_loc="training.pdf", csv_loc="training_progress.csv",heads
   plt.close()
 
 
-  color = {'avg_ep_reward':'g', 'min_ep_reward':'r','max_ep_reward':'b'}
-  color_m = {'avg_ep_reward':'go', 'min_ep_reward':'ro','max_ep_reward':'bo'}
+  color_reward = {'avg_ep_reward':'g', 'min_ep_reward':'r','max_ep_reward':'b'}
+  color_m_reward = {'avg_ep_reward':'go', 'min_ep_reward':'ro','max_ep_reward':'bo'}
   # print(avg_reward)
   plt.figure()
   plt.title("Reward Stats")
   for tag in reward_tags:
       smooth = np.convolve(eval(tag), h)
-      plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color[tag], label=tag, linewidth=2.0)
-      plt.plot(step, eval(tag), color_m[tag], alpha=.5)
+      plt.plot(step, smooth[len(h)  / 2:-len(h) / 2 + 1], color_reward[tag], label=tag, linewidth=2.0)
+      plt.plot(step, eval(tag), color_m_reward[tag], alpha=.5)
   plt.grid(True)
   plt.xlabel('frames [millions]')
   plt.legend(loc='best')
   plt.savefig(pp, format='pdf')
   plt.close()
 
-  cm_subsection = np.linspace(0, 1, heads_num)
-  color = [cm.jet(x) for x in cm_subsection]
+
+
   # print(diff_p)
   plt.figure()
   for i in range(0,heads_num):

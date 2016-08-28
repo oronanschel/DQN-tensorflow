@@ -26,15 +26,15 @@ flags.DEFINE_integer('action_repeat', 4, 'The number of action to be repeated')
 
 # Etc
 flags.DEFINE_boolean('use_gpu', True, 'Whether to use gpu or not')
-flags.DEFINE_string('gpu_fraction', '2/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
+flags.DEFINE_string('gpu_fraction', '1/10', 'idx / # of gpu fraction e.g. 1/3, 2/3, 3/3')
 flags.DEFINE_boolean('display', False, 'Whether to do display the game screen or not')
 flags.DEFINE_boolean('is_train', True, 'Whether to do training or testing')
 
 
-# import numpy as np
-# rand = np.random.randint(10,200)
-# print('rand seed:'+str(rand))
-flags.DEFINE_integer('random_seed', 124, 'Value of random seed')
+import numpy as np
+rand = np.random.randint(10,200)
+print('rand seed:'+str(rand))
+flags.DEFINE_integer('random_seed', rand, 'Value of random seed')
 
 FLAGS = flags.FLAGS
 
@@ -60,12 +60,14 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
-    # config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    config.folder_name = 'dTSET'
+    config.folder_name = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+'_TOY_10_heads'
+    # config.folder_name = 'boot_ddqn_tuned'
 
 
     if config.ToyProblem:
       env = MyGymEnvironment(config)
+      print('TOY ENV')
+
     else:
       env = ALEInterface()
       rng = np.random.RandomState(123456) # DETERMINSTIC
