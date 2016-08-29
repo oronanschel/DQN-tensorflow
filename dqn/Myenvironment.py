@@ -58,8 +58,11 @@ class Environment(object):
     #self.env = gym.make(config.env_name)
     self.env = myENV(config.screen_width)
 
-    screen_width, screen_height, self.action_repeat, self.random_start = \
-        config.screen_width, config.screen_height, config.action_repeat, config.random_start
+    # screen_width, screen_height, self.action_repeat, self.random_start = \
+        # config.screen_width, config.screen_height, config.action_repeat, config.random_start\
+
+    screen_width, screen_height, self.random_start = \
+        config.screen_width, config.screen_height, config.random_start
 
     self.display = config.display
     self.screen_dim = [screen_width,  screen_height ]

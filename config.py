@@ -2,85 +2,144 @@ class AgentConfig(object):
   # ToyProblem
   ToyProblem = True
 
-  display = False
+  if not ToyProblem:
+    screen_width  = 84
+    screen_height = 84
 
-  max_step = 50*(10**6)
-  # memory_size = 10**6
-  memory_size = 10 ** 4
+    display = True
+    death_minus_reward = True
 
-  # frame_skip = 4
-  frame_skip = 1
-  death_ends_episode = True
+    max_step = 50*(10**6)
+    memory_size = 10**6
 
-  batch_size = 32 # cannot be changed for now
-  random_start = 30
-  cnn_format = 'NCHW'
-  discount = 0.99
-  # target_q_update_step = 10**4
-  target_q_update_step =2* 10**3
-  learning_rate = 0.00025
-  learning_rate_minimum = 0.00025
-  # learning_rate = 0.000025
-  # learning_rate_minimum = 0.000025
-  learning_rate_decay = 0.96
-  learning_rate_decay_step = 50000
+    # frame_skip = 4
+    frame_skip = 4
+    death_ends_episode = False
 
-  ep_end = 0.1
-  ep_start = 1.
+    batch_size = 32 # cannot be changed for now
+    random_start = 4
+    cnn_format = 'NCHW'
+    discount = 0.99
+    target_q_update_step = 10**4
+    # target_q_update_step =3* 10**4
+    learning_rate = 0.00025
+    learning_rate_minimum = 0.00025
+    # learning_rate = 0.000025
+    # learning_rate_minimum = 0.000025
+    learning_rate_decay = 0.96
+    learning_rate_decay_step = 50000
 
-  # ep_end_t = 1*10**6
-  ep_end_t = 10 ** 4
+    ep_end = 0.05
+    ep_start = 1.
 
-  # history_length = 4
-  history_length = 2
-  train_frequency = 4
-  # train_frequency = 2
+    ep_end_t = 1*10**6
+    # ep_end_t = 10 ** 5
 
-  # learn_start = 5*(10**4)
-  learn_start = 10**3
+    history_length = 4
+    train_frequency = 4
+    # train_frequency = 2
 
-
-  min_delta = -1
-  max_delta = 1
-
-  double_q = True
-  dueling = False
-
-  # eval_freq =  125*(10**3)
-  eval_freq = 2000
-
-  # save_freq = 10000
-  # save_freq = 500
-
-  # eval_steps = 10**40
-  eval_steps = 500
-
-  valid_size = 1000
-
-  # Bootstrap
-  heads_num = 10
-  p  = 1
-  test_policy = 'Ensemble'
-  # test_policy = 'MaxQHead'
-  # test_policy = 'MajorityVote'
-  # test_policy = 'Standard'
+    learn_start = 5*(10**4)
+    # learn_start = 200
 
 
+    min_delta = -1
+    max_delta = 1
 
+    double_q = True
+
+    dueling = False
+
+    eval_freq =  125*(10**3)
+    # eval_freq = 15000
+
+    # save_freq = 10000
+    # save_freq = 500
+
+    eval_steps = 10**4
+    # eval_steps = 1000
+
+    valid_size = 1000
+
+    # Bootstrap
+    heads_num = 10
+    p  = 1
+    test_policy = 'Ensemble'
+    # test_policy = 'MaxQHead'
+    # test_policy = 'MajorityVote'
+    # test_policy = 'Standard'
+  if ToyProblem:
+    screen_width  = 10
+    screen_height = 1
+
+    display = False
+    death_minus_reward = False
+    death_ends_episode = False
+
+    max_step = 5 * (10 ** 6)
+    memory_size = 10 ** 5
+
+    frame_skip = 1
+
+    batch_size = 32  # cannot be changed for now
+    random_start = 4
+    cnn_format = 'NCHW'
+    discount = 0.99
+    target_q_update_step = 2*10 ** 3
+    # target_q_update_step =3* 10**4
+    learning_rate = 0.00025
+    learning_rate_minimum = 0.00025
+    # learning_rate = 0.000025
+    # learning_rate_minimum = 0.000025
+    learning_rate_decay = 0.96
+    learning_rate_decay_step = 50000
+
+    ep_end = 0.05
+    ep_start = 1.
+
+    ep_end_t = 1 * 10 ** 4
+
+    history_length = 2
+    train_frequency = 4
+
+    learn_start = 1 * (10 ** 3)
+
+
+    min_delta = -1
+    max_delta = 1
+
+    double_q = True
+
+    dueling = False
+
+    eval_freq = 8000
+
+    eval_steps = 1000
+
+    valid_size = 500
+    # Bootstrap
+    heads_num = 1
+    p = 1
+    test_policy = 'Ensemble'
+    # test_policy = 'MaxQHead'
+    # test_policy = 'MajorityVote'
+    # test_policy = 'Standard'
 
 
 class EnvironmentConfig(object):
   env_name = 'breakout.bin'
+  # env_name = 'qbert.bin'
+  # env_name = 'jamesbond.bin'
   # env_name = 'alien.bin'
   # env_name= 'battle_zone.bin'
   # env_name= 'beam_rider.bin'
-  ToyProblem = True
-  if ToyProblem:
-    screen_width  = 10
-    screen_height = 1
-  else:
-    screen_width  = 84
-    screen_height = 84
+  # ToyProblem = True
+  # if ToyProblem:
+  #   screen_width  = 10
+  #   screen_height = 1
+  # else:
+  #   screen_width  = 84
+  #   screen_height = 84
 
   max_reward = 1.
   min_reward = -1.
@@ -92,7 +151,7 @@ class DQNConfig(AgentConfig, EnvironmentConfig):
 class M1(DQNConfig):
   backend = 'tf'
   env_type = 'detail'
-  action_repeat = 1
+  # action_repeat = 1
 
 def get_config(FLAGS):
   if FLAGS.model == 'm1':

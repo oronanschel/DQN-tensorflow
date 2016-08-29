@@ -45,16 +45,26 @@ class ReplayMemory:
 
   def getState(self, index):
     assert self.count > 0, "replay memory is empy, use at least --random_steps 1"
-    # normalize index to expected range, allows negative indexes
-    index = index % self.count
+    # # normalize index to expected range, allows negative indexes
+    # index = index % self.count
     # if is not in the beginning of matrix
-    if index >= self.history_length - 1:
-      # use faster slicing
-      return self.screens[(index - (self.history_length - 1)):(index + 1), ...]
-    else:
-      # otherwise normalize indexes and use slower list based access
-      indexes = [(index - i) % self.count for i in reversed(range(self.history_length))]
-      return self.screens[indexes, ...]
+    # if index >= self.history_length - 1:
+    #   # use faster slicing
+    #   return self.screens[(index - (self.history_length - 1)):(index + 1), ...]
+    # else:
+    #   # otherwise normalize indexes and use slower list based access
+    #   indexes = [(index - i) % self.count for i in reversed(range(self.history_length))]
+    #   return self.screens[indexes, ...]
+    screens = self.screens[(index - (self.history_length - 1)):(index + 1), ...]
+    black = False
+    for i in range(index - 1, (index - self.history_length), -1):
+      if self.terminals[i] == True:
+        black = True
+      if black == True:
+        screens[i-(index-1)] = np.zeros(shape=screens[i-(index-1)].shape)
+
+    return screens
+
 
   def sample(self,batch_size = 32):
     # memory must include poststate, prestate and history
@@ -76,7 +86,7 @@ class ReplayMemory:
         # if wraps over episode end, then get new one
         # NB! poststate (last screen) can be terminal state!
         # if self.terminals[(index - self.history_length):index].any():
-        if self.terminals[index-1] == True:
+        if self.terminals[index-1]==True:
           continue
         # otherwise use this index
         break

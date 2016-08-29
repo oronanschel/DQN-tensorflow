@@ -119,14 +119,15 @@ class Agent(BaseModel):
 
   def new_random_game(self):
 
-    if self.config.ToyProblem:
-      num_actions = 4
-    else:
-      num_actions = np.random.randint(4, self.random_start)
-
+    num_actions = np.random.randint(2, self.random_start)
     for i in range(num_actions):
       self.env.act(self.noop_action)
-      self.history.add(self.get_observation())
+
+    self.history.reset()
+    screen = self.get_observation()
+    self.history.add(screen)
+    _mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
+    self.memory.add(screen,reward=0,action=self.noop_action,terminal=False,mask=_mask)
 
   def act(self,action):
     reward = 0
@@ -172,7 +173,7 @@ class Agent(BaseModel):
         self.new_random_game()
         for estep in range(0,self.eval_steps):
           # 1. predict
-          action = self.predict(self.history.get(), self.current_head,test_ep=0.001,is_training=False)
+          action = self.predict(self.history.get(), self.current_head,test_ep=0.01,is_training=False)
           actions.append(action)
           # 2. act
           screen, reward, terminal = self.act(action)
@@ -204,7 +205,8 @@ class Agent(BaseModel):
 
         lr = self.learning_rate_op.eval({self.learning_rate_step: self.step})
 
-        ep_rec = (self.ep_end +max(0., (self.ep_start - self.ep_end)* (self.ep_end_t - max(0., self.step - self.learn_start)) / self.ep_end_t))
+        ep_rec = self.getEpsilon()
+
         self.update_results(self.avg_loss, self.v_avg, avg_ep_reward, max_ep_reward, min_ep_reward, num_game,
                             ep_rec,g_w_l1_norm,lr,self.step,self.p_diff,self.q_diff)
 
@@ -277,13 +279,18 @@ class Agent(BaseModel):
       self.p_diff = self.sess.run([x for x in self.policy_diff],{self.s_t:s_t})
       self.q_diff = self.sess.run([x for x in self.q_l2_diff],{self.s_t:s_t})
 
+  def getEpsilon(self,test_ep = None):
+    step = self.step % 10**6
+    # step = self.step % 10 ** 6
+    ep = test_ep or (self.ep_end +
+                     max(0., (self.ep_start - self.ep_end)
+                         * (self.ep_end_t - max(0., step - self.learn_start)) / self.ep_end_t))
+    return ep
+
   def predict(self, s_t, current_head, test_ep=None,is_training=True):
 
+    ep = self.getEpsilon(test_ep)
 
-    step = self.step
-    ep = test_ep or (self.ep_end +
-        max(0., (self.ep_start - self.ep_end)
-          * (self.ep_end_t - max(0., step - self.learn_start)) / self.ep_end_t))
     if random.random() < ep:
       action = random.randrange(self.action_size)
     else:
@@ -295,13 +302,17 @@ class Agent(BaseModel):
     return action
 
   def observe(self, screen, reward, action, terminal,mask):
-    reward = max(self.min_reward, min(self.max_reward, reward))
 
     new_lives = self.env.lives()
     if(self.death_ends_episode and new_lives < self.lives):
       terminal = True
 
+    if(self.config.death_minus_reward and new_lives < self.lives):
+      reward -=1
+
     self.lives = new_lives
+
+    reward = max(self.min_reward, min(self.max_reward, reward))
 
 
     self.history.add(screen)
