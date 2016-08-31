@@ -48,8 +48,8 @@ def main(_):
     config = get_config(FLAGS) or FLAGS
 
     # folder name inside the model dir
-    config.folder_name = 'standard_dqn_10_head'
-    config.prog_file   = 'test_results_majority.csv'
+    config.folder_name = 'ddqn_10_head_2016-08-29_15-01-09'
+    config.prog_file   = 'test_results_ep103.csv'
 
     env = ALEInterface()
     rng = np.random.RandomState(123456) # DETERMINSTIC

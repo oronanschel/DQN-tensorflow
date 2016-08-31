@@ -1,13 +1,13 @@
 class AgentConfig(object):
   # ToyProblem
-  ToyProblem = True
+  ToyProblem = False
 
   if not ToyProblem:
     screen_width  = 84
     screen_height = 84
 
-    display = True
-    death_minus_reward = True
+    display = False
+    death_minus_reward = False
 
     max_step = 50*(10**6)
     memory_size = 10**6
@@ -29,7 +29,7 @@ class AgentConfig(object):
     learning_rate_decay = 0.96
     learning_rate_decay_step = 50000
 
-    ep_end = 0.05
+    ep_end = 0.1
     ep_start = 1.
 
     ep_end_t = 1*10**6
@@ -62,22 +62,22 @@ class AgentConfig(object):
     valid_size = 1000
 
     # Bootstrap
-    heads_num = 10
+    heads_num = 1
     p  = 1
     test_policy = 'Ensemble'
     # test_policy = 'MaxQHead'
     # test_policy = 'MajorityVote'
     # test_policy = 'Standard'
   if ToyProblem:
-    screen_width  = 10
+    screen_width  = 15
     screen_height = 1
 
     display = False
     death_minus_reward = False
     death_ends_episode = False
 
-    max_step = 5 * (10 ** 6)
-    memory_size = 10 ** 5
+    max_step = 5 * (10 ** 5)
+    memory_size = 10 ** 4
 
     frame_skip = 1
 
@@ -85,16 +85,13 @@ class AgentConfig(object):
     random_start = 4
     cnn_format = 'NCHW'
     discount = 0.99
-    target_q_update_step = 2*10 ** 3
-    # target_q_update_step =3* 10**4
+    target_q_update_step = 300
     learning_rate = 0.00025
     learning_rate_minimum = 0.00025
-    # learning_rate = 0.000025
-    # learning_rate_minimum = 0.000025
     learning_rate_decay = 0.96
     learning_rate_decay_step = 50000
 
-    ep_end = 0.05
+    ep_end = 0.1
     ep_start = 1.
 
     ep_end_t = 1 * 10 ** 4
@@ -102,7 +99,7 @@ class AgentConfig(object):
     history_length = 2
     train_frequency = 4
 
-    learn_start = 1 * (10 ** 3)
+    learn_start = 500
 
 
     min_delta = -1
@@ -112,9 +109,9 @@ class AgentConfig(object):
 
     dueling = False
 
-    eval_freq = 8000
+    eval_freq = 1250
 
-    eval_steps = 1000
+    eval_steps = 500
 
     valid_size = 500
     # Bootstrap
@@ -124,7 +121,6 @@ class AgentConfig(object):
     # test_policy = 'MaxQHead'
     # test_policy = 'MajorityVote'
     # test_policy = 'Standard'
-
 
 class EnvironmentConfig(object):
   env_name = 'breakout.bin'

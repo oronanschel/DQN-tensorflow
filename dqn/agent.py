@@ -24,15 +24,18 @@ class Agent(BaseModel):
     self.valid_size = config.valid_size
 
     # env
-    self.lives = environment.lives()
+    self.lives1 = environment.lives()
+    self.lives2 = environment.lives()
     self.env = environment
     self.death_ends_episode = config.death_ends_episode
     self.noop_action = 1
     self.frame_skip = config.frame_skip
-    self.action_size = len(self.env.getMinimalActionSet())
     self.screen_dims = self.env.getScreenDims()
     self.random_start = config.random_start
     self.legal_actions = self.env.getMinimalActionSet()
+    # if (config.env_name == 'breakout.bin'):
+    #   self.legal_actions = np.array([0,3,4],dtype=np.int32)
+    self.action_size = len(self.legal_actions)
 
     # bootstrap
     self.p = self.config.p
@@ -120,6 +123,7 @@ class Agent(BaseModel):
   def new_random_game(self):
 
     num_actions = np.random.randint(2, self.random_start)
+    num_actions = 3
     for i in range(num_actions):
       self.env.act(self.noop_action)
 
@@ -131,6 +135,12 @@ class Agent(BaseModel):
 
   def act(self,action):
     reward = 0
+
+    # new_lives = self.env.lives()
+    # if (new_lives < self.lives2):
+    #   reward += self.env.act(1)
+    # self.lives2 = new_lives
+    reward += self.env.act(1)
     for i in range(self.frame_skip):
       reward += self.env.act(self.legal_actions[action])
 
@@ -141,7 +151,7 @@ class Agent(BaseModel):
   def train(self):
     start_step = self.step_op.eval()
 
-    self.lives = self.env.lives()
+    self.lives1 = self.env.lives()
     self.env.reset_game()
     self.new_random_game()
 
@@ -168,13 +178,13 @@ class Agent(BaseModel):
         num_game, ep_reward = 0, 0.
         ep_rewards =  []
         num_game = 0
-        actions = []
+        # actions = []
         self.env.reset_game()
         self.new_random_game()
         for estep in range(0,self.eval_steps):
           # 1. predict
-          action = self.predict(self.history.get(), self.current_head,test_ep=0.01,is_training=False)
-          actions.append(action)
+          action = self.predict(self.history.get(), self.current_head,test_ep=10**-4,is_training=False)
+          # actions.append(action)
           # 2. act
           screen, reward, terminal = self.act(action)
           self.history.add(screen)
@@ -280,7 +290,7 @@ class Agent(BaseModel):
       self.q_diff = self.sess.run([x for x in self.q_l2_diff],{self.s_t:s_t})
 
   def getEpsilon(self,test_ep = None):
-    step = self.step % 10**6
+    step = self.step
     # step = self.step % 10 ** 6
     ep = test_ep or (self.ep_end +
                      max(0., (self.ep_start - self.ep_end)
@@ -295,22 +305,20 @@ class Agent(BaseModel):
       action = random.randrange(self.action_size)
     else:
       action = self.q_action.eval({self.s_t: [s_t], self.head: current_head, self.is_training: is_training})[0]
-      # new_lives = self.env.lives()
-      # if new_lives < self.lives:
-      #   action = self.noop_action
+
 
     return action
 
   def observe(self, screen, reward, action, terminal,mask):
 
     new_lives = self.env.lives()
-    if(self.death_ends_episode and new_lives < self.lives):
+    if(self.death_ends_episode and new_lives < self.lives1):
       terminal = True
 
-    if(self.config.death_minus_reward and new_lives < self.lives):
+    if(self.config.death_minus_reward and new_lives < self.lives1):
       reward -=1
 
-    self.lives = new_lives
+    self.lives1 = new_lives
 
     reward = max(self.min_reward, min(self.max_reward, reward))
 
@@ -755,14 +763,15 @@ class Agent(BaseModel):
                +'\nstd episode rewards:' + str(std_ep_reward)
                )
 
-  def testOnSaved(self, n_step=10**4, _test_ep=10**-2):
+  def testOnSaved(self, n_step=10**4, _test_ep=10**-4):
 
     models_list = self.saved_model_list()
 
     itr = 0
     for model in models_list:
       itr +=1
-
+      if not(itr== 19):
+        continue
       print('model: '+str(itr)+':'+str(len(models_list))+'  '+str(int(100*float(itr)/len(models_list)))+'%')
       self.load_model_i(model)
 
