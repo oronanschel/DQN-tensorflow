@@ -136,11 +136,11 @@ class Agent(BaseModel):
   def act(self,action):
     reward = 0
 
-    # new_lives = self.env.lives()
-    # if (new_lives < self.lives2):
-    #   reward += self.env.act(1)
-    # self.lives2 = new_lives
-    reward += self.env.act(1)
+    new_lives = self.env.lives()
+    if (new_lives < self.lives2):
+      reward += self.env.act(1)
+    self.lives2 = new_lives
+    # reward += self.env.act(1)
     for i in range(self.frame_skip):
       reward += self.env.act(self.legal_actions[action])
 
