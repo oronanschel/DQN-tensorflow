@@ -54,7 +54,7 @@ class AgentConfig(object):
     # eval_freq = 15000
 
     # save_freq = 10000
-    # save_freq = 500
+    # save_freq = )500
 
     eval_steps = 10**4
     # eval_steps = 1000
@@ -62,7 +62,7 @@ class AgentConfig(object):
     valid_size = 1000
 
     # Bootstrap
-    heads_num = 1
+    heads_num = 10
     p  = 1
     test_policy = 'Ensemble'
     # test_policy = 'MaxQHead'
