@@ -60,7 +60,7 @@ def main(_):
   with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     config = get_config(FLAGS) or FLAGS
 
-    exp_name = 'ddqn_1_head_target_update_3104'
+    exp_name = 'TT'
     config.folder_name = exp_name + datetime.datetime.now().strftime('_%Y-%m-%d_%H-%M-%S')
 
     # config.folder_name = 'ddqn_10_head_2016-08-29_15-01-09'

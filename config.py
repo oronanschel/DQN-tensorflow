@@ -3,25 +3,25 @@ class AgentConfig(object):
   ToyProblem = False
 
   if not ToyProblem:
+    cropped = True
     screen_width  = 84
     screen_height = 84
 
     display = False
-    death_minus_reward = False
 
     max_step = 50*(10**6)
     memory_size = 10**6
 
     # frame_skip = 4
     frame_skip = 4
-    death_ends_episode = False
+    death_ends_episode = True
 
     batch_size = 32 # cannot be changed for now
-    random_start = 4
+    random_start = 30
     cnn_format = 'NCHW'
     discount = 0.99
-    # target_q_update_step = 10**4
-    target_q_update_step =3* 10**4
+    target_q_update_step = 10**4
+    # target_q_update_step =3* 10**4
     learning_rate = 0.00025
     learning_rate_minimum = 0.00025
     # learning_rate = 0.000025
@@ -54,7 +54,7 @@ class AgentConfig(object):
     # eval_freq = 15000
 
     # save_freq = 10000
-    # save_freq = 500
+    # save_freq = )500
 
     eval_steps = 10**4
     # eval_steps = 1000

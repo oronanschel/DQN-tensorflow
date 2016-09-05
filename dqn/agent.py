@@ -28,13 +28,11 @@ class Agent(BaseModel):
     self.lives2 = environment.lives()
     self.env = environment
     self.death_ends_episode = config.death_ends_episode
-    self.noop_action = 1
+    self.noop_action = 0
     self.frame_skip = config.frame_skip
     self.screen_dims = self.env.getScreenDims()
     self.random_start = config.random_start
     self.legal_actions = self.env.getMinimalActionSet()
-    # if (config.env_name == 'breakout.bin'):
-    #   self.legal_actions = np.array([0,3,4],dtype=np.int32)
     self.action_size = len(self.legal_actions)
 
     # bootstrap
@@ -117,29 +115,31 @@ class Agent(BaseModel):
 
   def get_observation(self):
     screen = self.env.getScreenGrayscale().reshape(self.screen_dims[1], self.screen_dims[0])
-    resized = cv2.resize(screen, (self.screen_width, self.screen_height), interpolation=cv2.INTER_LINEAR)
+    if self.config.cropped:
+      cropped = screen[20:, :]
+      resized = cv2.resize(cropped, (self.screen_width, self.screen_height), interpolation=cv2.INTER_LINEAR)
+    else:
+      resized = cv2.resize(screen, (self.screen_width, self.screen_height), interpolation=cv2.INTER_LINEAR)
+
     return resized
 
   def new_random_game(self):
 
-    num_actions = np.random.randint(2, self.random_start)
-    num_actions = 3
+    num_actions = np.random.randint(4, self.random_start)
     for i in range(num_actions):
       self.env.act(self.noop_action)
+      if i >= num_actions - self.config.frame_skip:
+        self.history.add(self.get_observation())
 
-    self.history.reset()
-    screen = self.get_observation()
-    self.history.add(screen)
-    _mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
-    self.memory.add(screen,reward=0,action=self.noop_action,terminal=False,mask=_mask)
+
 
   def act(self,action):
     reward = 0
 
-    new_lives = self.env.lives()
-    if (new_lives < self.lives2):
-      reward += self.env.act(1)
-    self.lives2 = new_lives
+    # new_lives = self.env.lives()
+    # if (new_lives < self.lives2):
+    #   reward += self.env.act(1)
+    # self.lives2 = new_lives
     # reward += self.env.act(1)
     for i in range(self.frame_skip):
       reward += self.env.act(self.legal_actions[action])
@@ -314,9 +314,6 @@ class Agent(BaseModel):
     new_lives = self.env.lives()
     if(self.death_ends_episode and new_lives < self.lives1):
       terminal = True
-
-    if(self.config.death_minus_reward and new_lives < self.lives1):
-      reward -=1
 
     self.lives1 = new_lives
 
@@ -763,14 +760,14 @@ class Agent(BaseModel):
                +'\nstd episode rewards:' + str(std_ep_reward)
                )
 
-  def testOnSaved(self, n_step=10**4, _test_ep=10**-4):
+  def testOnSaved(self, n_step=10**4, _test_ep=0.05):
 
     models_list = self.saved_model_list()
 
     itr = 0
     for model in models_list:
       itr +=1
-      if not(itr== 19):
+      if not(itr%4==0):
         continue
       print('model: '+str(itr)+':'+str(len(models_list))+'  '+str(int(100*float(itr)/len(models_list)))+'%')
       self.load_model_i(model)
