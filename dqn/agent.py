@@ -131,8 +131,6 @@ class Agent(BaseModel):
       if i >= num_actions - self.config.frame_skip:
         self.history.add(self.get_observation())
 
-
-
   def act(self,action):
     reward = 0
 
@@ -157,13 +155,15 @@ class Agent(BaseModel):
 
     self.current_head = 0
     for self.step in tqdm(range(start_step, self.max_step), ncols=70, initial=start_step):
+      history = self.history.get()
       # 1. predict
-      action = self.predict(self.history.get(),self.current_head,is_training=True)
+      action = self.predict(history,self.current_head,is_training=True)
       # 2. act
       screen, reward, terminal = self.act(action)
+      self.history.add(screen)
       # 3. observe + learn
       mask = np.random.binomial(1, self.p, size=[self.HEADSNUM])
-      self.observe(screen, reward, action, terminal,mask)
+      self.observe(history[-1], reward, action, terminal,mask)
 
       if terminal:
         self.env.reset_game()
@@ -319,8 +319,6 @@ class Agent(BaseModel):
 
     reward = max(self.min_reward, min(self.max_reward, reward))
 
-
-    self.history.add(screen)
     self.memory.add(screen, reward, action, terminal,mask)
 
     if self.step > self.learn_start:

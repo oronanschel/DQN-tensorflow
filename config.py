@@ -51,7 +51,7 @@ class AgentConfig(object):
     dueling = False
 
     eval_freq =  125*(10**3)
-    # eval_freq = 15000
+    # eval_freq = 1000
 
     # save_freq = 10000
     # save_freq = )500

@@ -17,7 +17,7 @@ class ReplayMemory:
     self.actions = np.empty(self.memory_size, dtype = np.uint8)
     self.rewards = np.empty(self.memory_size, dtype = np.integer)
 
-    self.masks = np.empty((self.memory_size,self.HEADSNUM), dtype=np.float32)
+    self.masks = np.empty((self.memory_size,self.HEADSNUM), dtype=np.float16)
 
     self.screens = np.empty((self.memory_size, config.screen_height,config.screen_width), dtype = np.float16)
     self.terminals = np.empty(self.memory_size, dtype = np.bool)
@@ -25,7 +25,8 @@ class ReplayMemory:
     self.dims = (config.screen_height,config.screen_width)
     self.batch_size = config.batch_size
     self.count = 0
-    self.current = 0
+    self.top = 0
+    self.bottom = 0
 
     # pre-allocate prestates and poststates for minibatch
     self.prestates = np.empty((self.batch_size, self.history_length) + self.dims, dtype = np.float16)
@@ -35,13 +36,18 @@ class ReplayMemory:
   def add(self, screen, reward, action, terminal,mask=0):
     assert screen.shape == self.dims
     # NB! screen is post-state, after action and reward
-    self.actions[self.current] = action
-    self.rewards[self.current] = reward
-    self.screens[self.current, ...] = screen
-    self.terminals[self.current] = terminal
-    self.masks[self.current] = mask
-    self.count = max(self.count, self.current + 1)
-    self.current = (self.current + 1) % self.memory_size
+    self.actions[self.top] = action
+    self.rewards[self.top] = reward
+    self.screens[self.top, ...] = screen
+    self.terminals[self.top] = terminal
+    self.masks[self.top] = mask
+
+    if self.count == self.memory_size:
+      self.bottom = (self.bottom + 1) % self.memory_size
+    else:
+      self.count += 1
+
+    self.top = (self.top + 1) % self.memory_size
 
   def getState(self, index):
     assert self.count > 0, "replay memory is empy, use at least --random_steps 1"
@@ -72,41 +78,50 @@ class ReplayMemory:
     # sample random indexes
     indexes = []
 
-    self.prestates = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
-    self.poststates = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
+    states = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
+    next_state = np.empty((batch_size, self.history_length) + self.dims, dtype=np.float16)
+    actions = np.empty(batch_size,dtype=np.uint8)
+    rewards = np.empty(batch_size,dtype=np.integer)
+    terminals = np.empty(batch_size,dtype=np.bool)
+    masks = np.empty((batch_size,self.HEADSNUM),dtype=np.float16)
 
-    while len(indexes) < batch_size:
+    count = 0
+    while count < batch_size:
       # find random index 
-      while True:
-        # sample one index (ignore states wraping over 
-        index = random.randint(self.history_length, self.count - 1)
-        # if wraps over current pointer, then get new one
-        if index >= self.current and index - self.history_length < self.current:
-          continue
-        # if wraps over episode end, then get new one
-        # NB! poststate (last screen) can be terminal state!
-        if self.terminals[(index - self.history_length):index].any():
-          continue
-        # otherwise use this index
-        break
+      # sample one index (ignore states wraping over
+      index = random.randint(self.bottom,
+                   self.bottom + self.count - self.history_length)
 
+      init_ind = np.arange(index, index + self.history_length)
+      trans_ind = init_ind + 1
+      end_ind   = index +self.history_length - 1
+      if np.any(self.terminals.take(init_ind[0:-1],mode='wrap')):
+        continue
 
+      states     [count, ...] = self.screens.take(init_ind, axis=0, mode='wrap')
+      next_state [count, ...] = self.screens.take(trans_ind, axis=0, mode='wrap')
+      actions    [count, ...] = self.actions.take(end_ind, mode='wrap')
+      rewards    [count, ...] = self.rewards.take(end_ind, mode='wrap')
+      terminals  [count, ...] = self.terminals.take(end_ind, mode='wrap')
+      masks      [count, ...] = self.masks.take(end_ind, axis=0, mode='wrap')
+
+      count+=1
 
       # NB! having index first is fastest in C-order matrices
-      self.prestates[len(indexes), ...] = self.getState(index - 1)
-      self.poststates[len(indexes), ...] = self.getState(index)
-      indexes.append(index)
-
-    actions = self.actions[indexes]
-    rewards = self.rewards[indexes]
-    terminals = self.terminals[indexes]
-    masks  = self.masks[indexes]
+      # self.prestates[len(indexes), ...] = self.getState(index - 1)
+      # self.poststates[len(indexes), ...] = self.getState(index)
+    #   indexes.append(index)
+    #
+    # actions = self.actions[indexes]
+    # rewards = self.rewards[indexes]
+    # terminals = self.terminals[indexes]
+    # masks  = self.masks[indexes]
 
     if self.cnn_format == 'NHWC':
-      return np.transpose(self.prestates, (0, 2, 3, 1)), actions, \
-        rewards, np.transpose(self.poststates, (0, 2, 3, 1)), terminals, masks
+      return np.transpose(states, (0, 2, 3, 1)), actions, \
+        rewards, np.transpose(next_state, (0, 2, 3, 1)), terminals, masks
     else:
-      return self.prestates, actions, rewards, self.poststates, terminals, masks
+      return states, actions, rewards, next_state, terminals, masks
 
   def save(self):
     for idx, (name, array) in enumerate(
